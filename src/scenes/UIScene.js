@@ -126,4 +126,279 @@ class UIScene extends Phaser.Scene {
       g.lineBetween(x + Math.cos(rad) * 16, y + Math.sin(rad) * 16, x + Math.cos(rad) * r, y + Math.sin(rad) * r);
     }
 
-    const label = value >= 100 ? `$
+    const label = value >= 100 ? `${value / 100}C` : `${value}`;
+    const txt = this.add.text(x, y, label, {
+      fontFamily: VI.FONTS.HEADING, fontSize: '11px', color: '#ffffff',
+    }).setOrigin(0.5);
+
+    const zone = this.add.zone(x, y, r * 2 + 8, r * 2 + 8).setInteractive({ cursor: 'pointer' });
+    zone.on('pointerover',  () => { g.setScale(1.14); txt.setScale(1.14); });
+    zone.on('pointerout',   () => { g.setScale(1);    txt.setScale(1); });
+    zone.on('pointerup',    () => {
+      const gs = this._gs;
+      if (!gs || gs.gs.state !== 'playing') return;
+      this._accumulatedBet += value;
+      this._refreshBetDisplay(this._accumulatedBet);
+    });
+
+    return { g, txt, zone };
+  }
+
+  // ── Bet display ────────────────────────────────────────────
+
+  _buildBetDisplay(width, height) {
+    const panelH = 90;
+    const by = height - panelH / 2;
+    const bx = width * 0.42;
+
+    this.add.text(bx, by - 16, 'CURRENT BET', {
+      fontFamily: VI.FONTS.BODY, fontSize: '10px',
+      color: VI.HEX.CYAN, letterSpacing: 4,
+    }).setOrigin(0.5);
+
+    this._betText = this.add.text(bx, by + 6, '$0', {
+      fontFamily: VI.FONTS.MONO, fontSize: '24px', color: VI.HEX.GOLD,
+    }).setOrigin(0.5);
+
+    // Clear bet button
+    const clrZone = this.add.zone(bx, by + 30, 70, 18).setInteractive({ cursor: 'pointer' });
+    const clrTxt  = this.add.text(bx, by + 30, 'CLEAR', {
+      fontFamily: VI.FONTS.MONO, fontSize: '10px', color: '#ffffff33',
+    }).setOrigin(0.5);
+    clrZone.on('pointerover', () => clrTxt.setColor(VI.HEX.MAGENTA));
+    clrZone.on('pointerout',  () => clrTxt.setColor('#ffffff33'));
+    clrZone.on('pointerup', () => {
+      this._accumulatedBet = 0;
+      this._refreshBetDisplay(0);
+    });
+
+    // Confirm bet button
+    const cfW = 110, cfH = 30;
+    const cfX = bx + 90, cfY = by;
+    const cfG = this.add.graphics();
+    cfG.fillStyle(VI.COLORS.VI_BLUE, 0.9);
+    cfG.fillRoundedRect(cfX - cfW/2, cfY - cfH/2, cfW, cfH, 6);
+    cfG.lineStyle(1, VI.COLORS.CYAN, 0.6);
+    cfG.strokeRoundedRect(cfX - cfW/2, cfY - cfH/2, cfW, cfH, 6);
+
+    const cfLbl = this.add.text(cfX, cfY, 'CONFIRM BET', {
+      fontFamily: VI.FONTS.HEADING, fontSize: '11px', color: '#fff',
+    }).setOrigin(0.5);
+
+    const cfZone = this.add.zone(cfX, cfY, cfW, cfH).setInteractive({ cursor: 'pointer' });
+    cfZone.on('pointerover', () => { cfG.clear(); cfG.fillStyle(VI.COLORS.CYAN, 1); cfG.fillRoundedRect(cfX - cfW/2, cfY - cfH/2, cfW, cfH, 6); cfLbl.setColor(VI.HEX.FLOOD_BLACK); });
+    cfZone.on('pointerout',  () => { cfG.clear(); cfG.fillStyle(VI.COLORS.VI_BLUE, 0.9); cfG.fillRoundedRect(cfX - cfW/2, cfY - cfH/2, cfW, cfH, 6); cfG.lineStyle(1, VI.COLORS.CYAN, 0.6); cfG.strokeRoundedRect(cfX - cfW/2, cfY - cfH/2, cfW, cfH, 6); cfLbl.setColor('#fff'); });
+    cfZone.on('pointerup', () => {
+      if (this._accumulatedBet <= 0) { this._showToast('Place a bet first!', VI.HEX.MAGENTA, 1200); return; }
+      const gs = this._gs;
+      if (!gs || gs.gs.state !== 'playing') return;
+      if (this._accumulatedBet > gs.gs.balance) {
+        this._showToast('Not enough balance!', VI.HEX.MAGENTA, 1200); return;
+      }
+      this._currentBet = this._accumulatedBet;
+      gs.events.emit('ui:bet_confirmed', this._currentBet);
+      this._showToast(`Bet confirmed: $${this._currentBet}`, VI.HEX.VI_AMBER, 900);
+    });
+  }
+
+  _refreshBetDisplay(amt) {
+    this._accumulatedBet = amt;
+    if (this._betText) this._betText.setText(`$${amt.toLocaleString()}`);
+  }
+
+  // ── Action card strip ──────────────────────────────────────
+
+  _buildActionStrip(width, height) {
+    const cards = [
+      { id: 'EXTRA_CLUE', label: 'EXTRA\nCLUE',    color: VI.COLORS.VI_BLUE   },
+      { id: 'ELIMINATE',  label: 'ELIM-\nINATE',   color: VI.COLORS.MAGENTA   },
+      { id: 'LOCK_IN',    label: 'LOCK\nIN',        color: VI.COLORS.VI_BLUE   },
+      { id: 'DOUBLE_DOWN',label: 'DBL\nDOWN',       color: VI.COLORS.VI_ORANGE },
+      { id: 'CHAOS_ROLL', label: 'CHAOS\nROLL',     color: VI.COLORS.VI_PURPLE },
+      { id: 'INSURANCE',  label: 'INSUR-\nANCE',    color: VI.COLORS.CYAN      },
+    ];
+
+    const cw = 62, ch = 68;
+    const gap = 6;
+    const totalW = cards.length * (cw + gap) - gap;
+    const startX = (width - totalW) / 2;
+    const y      = height - 90 - ch / 2 - 8;
+
+    this._actionCards = {};
+    cards.forEach((card, i) => {
+      const cx = startX + i * (cw + gap) + cw / 2;
+      this._actionCards[card.id] = this._drawActionCard(cx, y, cw, ch, card);
+    });
+  }
+
+  _drawActionCard(x, y, w, h, card) {
+    const g = this.add.graphics();
+    const _draw = (hover, used) => {
+      g.clear();
+      if (used) {
+        g.fillStyle(VI.COLORS.PANEL_SURFACE, 0.4);
+        g.fillRoundedRect(x - w/2, y - h/2, w, h, 6);
+        g.lineStyle(1, card.color, 0.2);
+        g.strokeRoundedRect(x - w/2, y - h/2, w, h, 6);
+      } else if (hover) {
+        g.fillStyle(card.color, 0.25);
+        g.fillRoundedRect(x - w/2, y - h/2, w, h, 6);
+        g.lineStyle(2, card.color, 1);
+        g.strokeRoundedRect(x - w/2, y - h/2, w, h, 6);
+      } else {
+        g.fillStyle(card.color, 0.1);
+        g.fillRoundedRect(x - w/2, y - h/2, w, h, 6);
+        g.lineStyle(1, card.color, 0.5);
+        g.strokeRoundedRect(x - w/2, y - h/2, w, h, 6);
+      }
+    };
+    _draw(false, false);
+
+    const txt = this.add.text(x, y, card.label, {
+      fontFamily: VI.FONTS.HEADING, fontSize: '9px',
+      color: Phaser.Display.Color.IntegerToColor(card.color).rgba,
+      align: 'center', lineSpacing: 2,
+    }).setOrigin(0.5);
+
+    const zone = this.add.zone(x, y, w, h).setInteractive({ cursor: 'pointer' });
+    let used = false;
+    zone.on('pointerover',  () => { if (!used) _draw(true,  false); });
+    zone.on('pointerout',   () => { if (!used) _draw(false, false); });
+    zone.on('pointerup', () => {
+      if (used || this._actionCooldown) return;
+      const gs = this._gs;
+      if (!gs || gs.gs.state !== 'playing') return;
+      gs.events.emit('ui:action_card', card.id);
+      // Card stays active; disabled on 'game:action_used' event
+    });
+
+    return { g, txt, zone, _draw, get used() { return used; }, setUsed() { used = true; _draw(false, true); txt.setAlpha(0.3); zone.disableInteractive(); } };
+  }
+
+  _disableActionCard(id) {
+    const c = this._actionCards[id];
+    if (c) c.setUsed();
+  }
+
+  // ── Accuse button ──────────────────────────────────────────
+
+  _buildAccuseButton(width, height) {
+    const bw = 160, bh = 54;
+    const bx = width - 100, by = height - 90 - bh / 2 - 8;
+    const g  = this.add.graphics();
+
+    const _draw = (hover) => {
+      g.clear();
+      if (hover) {
+        g.fillStyle(VI.COLORS.MAGENTA, 1);
+        g.fillRoundedRect(bx - bw/2, by - bh/2, bw, bh, 10);
+        g.lineStyle(3, VI.COLORS.GOLD, 1);
+        g.strokeRoundedRect(bx - bw/2, by - bh/2, bw, bh, 10);
+      } else {
+        g.fillStyle(VI.COLORS.VI_RED, 0.85);
+        g.fillRoundedRect(bx - bw/2, by - bh/2, bw, bh, 10);
+        g.lineStyle(2, VI.COLORS.MAGENTA, 0.7);
+        g.strokeRoundedRect(bx - bw/2, by - bh/2, bw, bh, 10);
+      }
+    };
+    _draw(false);
+
+    const lbl = this.add.text(bx, by, '🔍 ACCUSE!', {
+      fontFamily: VI.FONTS.HEADING, fontSize: '17px', color: '#ffffff',
+      stroke: '#000', strokeThickness: 3,
+    }).setOrigin(0.5);
+
+    const zone = this.add.zone(bx, by, bw, bh).setInteractive({ cursor: 'pointer' });
+    zone.on('pointerover',  () => { _draw(true);  lbl.setColor(VI.HEX.GOLD); });
+    zone.on('pointerout',   () => { _draw(false); lbl.setColor('#ffffff'); });
+    zone.on('pointerdown',  () => this.cameras.main.flash(80, 255, 0, 80, false));
+    zone.on('pointerup', () => {
+      const gs = this._gs;
+      if (!gs) return;
+      gs.events.emit('ui:accuse');
+    });
+  }
+
+  // ── Suspect selected indicator (bottom-left) ───────────────
+
+  _onSuspectSelected(data) {
+    if (!this._suspectLabel) {
+      const { height } = this.scale;
+      this.add.text(16, height - 92 - 68, 'SUSPECT', {
+        fontFamily: VI.FONTS.BODY, fontSize: '10px',
+        color: VI.HEX.CYAN, letterSpacing: 4,
+      });
+      this._suspectLabel = this.add.text(16, height - 92 - 50, '—', {
+        fontFamily: VI.FONTS.HEADING, fontSize: '16px', color: VI.HEX.GOLD,
+      });
+    }
+    this._suspectLabel.setText(data.suspect.name.toUpperCase());
+    this._gs.events.emit('ui:suspect_select', data.idx);
+  }
+
+  // ── Event handlers ─────────────────────────────────────────
+
+  _onRoundStart(data) {
+    this._accumulatedBet = 0;
+    this._currentBet     = 0;
+    if (this._betText) this._betText.setText('$0');
+    // Re-enable action cards
+    if (this._actionCards) {
+      // Rebuild strip — easiest approach
+      Object.values(this._actionCards).forEach(c => {
+        c.g.destroy(); c.txt.destroy(); c.zone.destroy();
+      });
+      const { width, height } = this.scale;
+      this._buildActionStrip(width, height);
+    }
+  }
+
+  _onFolderUpdate(pct) {
+    // Could animate a secondary indicator here; GameScene already renders the bar
+  }
+
+  _onWin(data) {
+    this._showToast(`+$${Math.round(data.payout).toLocaleString()}`, VI.HEX.GOLD, 2500);
+    this._accumulatedBet = 0;
+    if (this._betText) this._betText.setText('$0');
+  }
+
+  _onLoss(data) {
+    this._showToast(`-$${data.lost.toLocaleString()}`, VI.HEX.VI_RED, 2500);
+    this._accumulatedBet = 0;
+    if (this._betText) this._betText.setText('$0');
+  }
+
+  _onNextRound(balance) {
+    this._balance        = balance;
+    this._accumulatedBet = 0;
+    this._currentBet     = 0;
+    if (this._betText) this._betText.setText('$0');
+  }
+
+  // ── Toast notifications ─────────────────────────────────────
+
+  _showToast(msg, color, duration) {
+    color    = color    || VI.HEX.CREAM;
+    duration = duration || 1500;
+
+    const { width } = this.scale;
+    const toast = this.add.text(width / 2, this._toastY, msg, {
+      fontFamily: VI.FONTS.HEADING, fontSize: '28px',
+      color, stroke: '#000000', strokeThickness: 4,
+      shadow: { blur: 12, color, fill: true },
+    }).setOrigin(0.5).setAlpha(0);
+
+    this.tweens.add({
+      targets: toast, alpha: 1, y: this._toastY - 12,
+      duration: 280, ease: 'Back.Out',
+      onComplete: () => {
+        this.tweens.add({
+          targets: toast, alpha: 0, y: this._toastY - 36,
+          delay: duration, duration: 350, ease: 'Power2',
+          onComplete: () => toast.destroy(),
+        });
+      },
+    });
+  }
+}

@@ -150,4 +150,17 @@ class MenuScene extends Phaser.Scene {
 
     const zone = this.add.zone(x, y, bw, bh).setInteractive({ cursor: 'pointer' });
     zone.on('pointerover',  () => { drawHover(); text.setColor(VI.HEX.GOLD); });
-    zone.on('
+    zone.on('pointerout',   () => { drawNormal(); text.setColor('#ffffff'); });
+    zone.on('pointerdown',  () => { this.cameras.main.flash(200, 0, 0, 0, false); });
+    zone.on('pointerup',    callback);
+  }
+
+  _showHelp() {
+    // TODO: push a modal overlay scene or display rules text
+    console.log('How to Play – TODO');
+  }
+
+  _showCredits() {
+    console.log('Credits – TODO');
+  }
+}

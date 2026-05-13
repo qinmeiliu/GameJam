@@ -55,7 +55,7 @@ Ducky Detective/
 │       ├── BootScene.js         ← Empty boot, sets fullscreen target
 │       ├── PreloadScene.js      ← Loading bar (⚠ references non-existent VI colours)
 │       ├── MenuScene.js         ← Title scene: QUACKDUNNIT hero, PLAY (SPACE/ENTER), HOW TO PLAY modal
-│       ├── LobbyScene.js        ← Suspect count picker, payout preview table
+│       ├── LobbyScene.js        ← Round table of guests: 3 mandatory + 3 toggleable seats, live payout plate in centre, Ducky aside
 │       ├── GameScene.js         ← Round flow, suspect tokens, clue feed, accuse flow
 │       └── UIScene.js           ← Persistent HUD: chips, bet, action cards, accuse button
 └── assets/                       ← Image/audio/font folders (empty — placeholders for now)

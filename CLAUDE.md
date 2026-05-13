@@ -8,7 +8,7 @@
 
 ## PROJECT IDENTITY
 
-- **Working title:** The Ducky Detective Agency
+- **Working title:** QUACKDUNNIT (formerly "The Ducky Detective Agency" — shortened, single-word on the title screen for impact)
 - **Platform:** Vegas Infinite web library, deployed via GitHub Pages (100% static)
 - **Engine:** Phaser 3.80.1 (CDN, no build step)
 - **Genre:** Whodunnit casino game — 30% logic / 70% chaos
@@ -54,7 +54,7 @@ Ducky Detective/
 │   └── scenes/
 │       ├── BootScene.js         ← Empty boot, sets fullscreen target
 │       ├── PreloadScene.js      ← Loading bar (⚠ references non-existent VI colours)
-│       ├── MenuScene.js         ← Title scene: game name, tagline, PLAY (SPACE/ENTER too), HOW TO PLAY modal
+│       ├── MenuScene.js         ← Title scene: QUACKDUNNIT hero, PLAY (SPACE/ENTER), HOW TO PLAY modal
 │       ├── LobbyScene.js        ← Suspect count picker, payout preview table
 │       ├── GameScene.js         ← Round flow, suspect tokens, clue feed, accuse flow
 │       └── UIScene.js           ← Persistent HUD: chips, bet, action cards, accuse button

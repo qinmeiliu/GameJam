@@ -11,85 +11,54 @@ class MenuScene extends Phaser.Scene {
   create() {
     const { width, height } = this.scale;
     const cx = width / 2;
+    const cy = height / 2;
 
-    // ── Background ────────────────────────────────────────────
+    // ── Background (kept) ─────────────────────────────────────
     this._drawBackground();
-
-    // ── Decorative neon lines ─────────────────────────────────
     this._drawNeonAccents();
 
-    // ── Pre-title eyebrow (VI brand presence, kept small) ─────
-    this.add.text(cx, 70, 'VEGAS INFINITE  ·  GAME JAM', {
-      fontFamily: VI.FONTS.BODY,
-      fontSize: '12px',
-      color: VI.HEX.CYAN,
-      letterSpacing: 6,
-      alpha: 0.7,
-    }).setOrigin(0.5);
+    // ── Game Title — QUACKDUNNIT, single hero word ────────────
+    // Cyan back-glow layer, gold front letters, magenta sub-shadow.
+    // Single word means we can go big without breaking the line.
+    const titleY = cy - 110;
 
-    // ── Game Title ────────────────────────────────────────────
-    // Two-line stacked title: THE DUCKY / DETECTIVE AGENCY
-    this.add.text(cx, 130, 'THE DUCKY', {
+    // Soft cyan haze behind the title for the Glow-Fi feel
+    const haze = this.add.graphics();
+    haze.fillStyle(VI.COLORS.CYAN, 0.05);
+    haze.fillEllipse(cx, titleY + 6, 880, 200);
+    haze.fillStyle(VI.COLORS.MAGENTA, 0.04);
+    haze.fillEllipse(cx, titleY + 18, 720, 140);
+
+    const title = this.add.text(cx, titleY, 'QUACKDUNNIT', {
       fontFamily: VI.FONTS.HEADING,
-      fontSize: '64px',
+      fontSize: '110px',
       color: VI.HEX.GOLD,
       stroke: '#000000',
-      strokeThickness: 6,
-      shadow: { blur: 24, color: VI.HEX.GOLD, fill: true },
-      letterSpacing: 6,
+      strokeThickness: 8,
+      shadow: { blur: 28, color: VI.HEX.GOLD, fill: true },
+      letterSpacing: 12,
     }).setOrigin(0.5);
 
-    this.add.text(cx, 196, 'DETECTIVE AGENCY', {
-      fontFamily: VI.FONTS.HEADING,
-      fontSize: '52px',
-      color: VI.HEX.CYAN,
-      stroke: '#000000',
-      strokeThickness: 5,
-      shadow: { blur: 18, color: VI.HEX.CYAN, fill: true },
-      letterSpacing: 8,
-    }).setOrigin(0.5);
+    // Gentle title bob — alive, but subtle
+    this.tweens.add({
+      targets: title, y: titleY - 4,
+      duration: 1800, yoyo: true, repeat: -1, ease: 'Sine.easeInOut',
+    });
 
-    // ── Tagline (GDD epigraph) ────────────────────────────────
-    this.add.text(cx, 248, '"Every crime has a culprit. Every clue is nonsense. Every bet is faith."', {
-      fontFamily: VI.FONTS.BODY,
-      fontSize: '14px',
-      color: VI.HEX.CREAM,
-      alpha: 0.55,
-      fontStyle: 'italic',
-    }).setOrigin(0.5);
+    // ── Primary action: PLAY (dominant, centered) ──────────────
+    this._addPrimaryButton(cx, cy + 50, '▶  PLAY', () => this._startGame());
 
-    // ── Ducky placeholder ──────────────────────────────────────
-    // Replace this rect with: this.add.image(cx, 400, 'ducky').setOrigin(0.5);
-    this._drawDuckyPlaceholder(cx, 400);
+    // ── Secondary action: HOW TO PLAY (one button only) ────────
+    this._addSecondaryButton(cx, cy + 130, 'HOW TO PLAY', () => this._showHelp());
 
-    // ── Primary action: PLAY (dominant) ────────────────────────
-    this._addPrimaryButton(cx, 560, '▶  PLAY', () => this._startGame());
-
-    // ── Secondary actions ─────────────────────────────────────
-    this._addSecondaryButton(cx - 110, 632, 'HOW TO PLAY', () => this._showHelp());
-    this._addSecondaryButton(cx + 110, 632, 'CREDITS',     () => this._showCredits());
-
-    // ── Version stamp ─────────────────────────────────────────
-    this.add.text(width - 16, height - 16, 'v0.2.0 – Sprint 1', {
+    // ── Version stamp (tiny, corner) ──────────────────────────
+    this.add.text(width - 16, height - 16, 'v0.3.0 – QUACKDUNNIT', {
       fontFamily: VI.FONTS.MONO,
       fontSize: '11px',
       color: '#ffffff33',
     }).setOrigin(1, 1);
 
-    // ── Press SPACE/ENTER hint ────────────────────────────────
-    this._pressHint = this.add.text(cx, 605, 'PRESS  SPACE  OR  ENTER  TO  PLAY', {
-      fontFamily: VI.FONTS.MONO,
-      fontSize: '10px',
-      color: VI.HEX.CYAN,
-      letterSpacing: 4,
-      alpha: 0.55,
-    }).setOrigin(0.5);
-    this.tweens.add({
-      targets: this._pressHint, alpha: { from: 0.2, to: 0.7 },
-      duration: 1200, yoyo: true, repeat: -1, ease: 'Sine.easeInOut',
-    });
-
-    // Keyboard shortcuts: SPACE/ENTER start the game
+    // Keyboard shortcuts still active (no on-screen hint)
     const k = this.input.keyboard;
     k.on('keydown-SPACE', () => this._startGame());
     k.on('keydown-ENTER', () => this._startGame());
@@ -152,20 +121,6 @@ class MenuScene extends Phaser.Scene {
       g.lineStyle(2, VI.COLORS.GOLD, 0.8);
       g.strokeRect(x, y, sx * bw, sy * bh);
     });
-  }
-
-  _drawDuckyPlaceholder(x, y) {
-    // Temporary placeholder until ducky asset is dropped in
-    const g = this.add.graphics();
-    g.lineStyle(2, VI.COLORS.GOLD, 0.5);
-    g.strokeRoundedRect(x - 80, y - 90, 160, 160, 12);
-
-    this.add.text(x, y - 10, '🦆', { fontSize: '72px' }).setOrigin(0.5);
-    this.add.text(x, y + 60, 'Ducky', {
-      fontFamily: VI.FONTS.BODY,
-      fontSize: '13px',
-      color: '#ffffff44',
-    }).setOrigin(0.5);
   }
 
   // Primary CTA — dominant, glowing magenta-to-purple with gold border

@@ -3,7 +3,11 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Vegas Infinite – Game Jam</title>
+  <title>Ducky Detective Agency – Vegas Infinite Game Jam</title>
+  <!-- Oswald (Capitana stand-in) from Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Oswald:wght@300;400;700&display=swap" rel="stylesheet" />
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body {
@@ -30,13 +34,5 @@
   <!-- Phaser 3 from CDN — no build step needed -->
   <script src="https://cdn.jsdelivr.net/npm/phaser@3.80.1/dist/phaser.min.js"></script>
 
-  <!-- Game scenes (load order matters) -->
-  <script src="src/utils/constants.js"></script>
-  <script src="src/scenes/BootScene.js"></script>
-  <script src="src/scenes/PreloadScene.js"></script>
-  <script src="src/scenes/MenuScene.js"></script>
-  <script src="src/scenes/GameScene.js"></script>
-  <script src="src/scenes/UIScene.js"></script>
-  <script src="src/main.js"></script>
-</body>
-</html>
+  <!-- Game data & systems (must load before scenes) -->
+  <script sr

@@ -33,7 +33,7 @@ class MenuScene extends Phaser.Scene {
     this.add.text(cx, 152, 'GAME JAM', {
       fontFamily: VI.FONTS.BODY,
       fontSize: '22px',
-      color: VI.HEX.NEON_BLUE,
+      color: VI.HEX.CYAN,
       letterSpacing: 12,
     }).setOrigin(0.5);
 
@@ -42,7 +42,7 @@ class MenuScene extends Phaser.Scene {
     this._drawDuckyPlaceholder(cx, 370);
 
     // ── Buttons ───────────────────────────────────────────────
-    this._addButton(cx, 550, '▶  PLAY',         () => this.scene.start('GameScene'));
+    this._addButton(cx, 550, '▶  PLAY',         () => this.scene.start('LobbyScene', { balance: VI.GAME.DEFAULT_BALANCE }));
     this._addButton(cx, 618, 'HOW TO PLAY',      () => this._showHelp());
     this._addButton(cx, 686, 'CREDITS',           () => this._showCredits());
 
@@ -61,16 +61,25 @@ class MenuScene extends Phaser.Scene {
     const bg = this.add.graphics();
 
     // Deep base
-    bg.fillStyle(VI.COLORS.BG_DEEP, 1);
+    bg.fillStyle(VI.COLORS.FLOOD_BLACK, 1);
     bg.fillRect(0, 0, width, height);
 
-    // Radial gradient effect (fake it with concentric rects fading out)
+    // Radial gradient effect (fake it with concentric ellipses fading out)
     const steps = 8;
     for (let i = steps; i > 0; i--) {
       const alpha = 0.04 * (steps - i + 1);
       const size  = (i / steps);
-      bg.fillStyle(VI.COLORS.PURPLE, alpha);
+      bg.fillStyle(VI.COLORS.VI_PURPLE, alpha);
       bg.fillEllipse(width / 2, height / 2, width * size, height * size);
+    }
+
+    // Dot matrix (Linear GFX — Brand Bible toolkit)
+    const dot = this.add.graphics();
+    dot.fillStyle(VI.COLORS.CYAN, VI.GAME.DOT_OPACITY);
+    for (let x = 0; x < width; x += VI.GAME.DOT_SPACING) {
+      for (let y = 0; y < height; y += VI.GAME.DOT_SPACING) {
+        dot.fillCircle(x, y, VI.GAME.DOT_RADIUS);
+      }
     }
   }
 
@@ -117,7 +126,7 @@ class MenuScene extends Phaser.Scene {
 
     const drawNormal = () => {
       btn.clear();
-      btn.fillStyle(VI.COLORS.PURPLE_DARK, 0.9);
+      btn.fillStyle(VI.COLORS.PANEL_SURFACE, 0.9);
       btn.fillRoundedRect(x - bw / 2, y - bh / 2, bw, bh, 8);
       btn.lineStyle(1, VI.COLORS.GOLD, 0.6);
       btn.strokeRoundedRect(x - bw / 2, y - bh / 2, bw, bh, 8);
@@ -125,7 +134,7 @@ class MenuScene extends Phaser.Scene {
 
     const drawHover = () => {
       btn.clear();
-      btn.fillStyle(VI.COLORS.PURPLE, 1);
+      btn.fillStyle(VI.COLORS.VI_PURPLE, 1);
       btn.fillRoundedRect(x - bw / 2, y - bh / 2, bw, bh, 8);
       btn.lineStyle(2, VI.COLORS.GOLD, 1);
       btn.strokeRoundedRect(x - bw / 2, y - bh / 2, bw, bh, 8);
@@ -141,17 +150,4 @@ class MenuScene extends Phaser.Scene {
 
     const zone = this.add.zone(x, y, bw, bh).setInteractive({ cursor: 'pointer' });
     zone.on('pointerover',  () => { drawHover(); text.setColor(VI.HEX.GOLD); });
-    zone.on('pointerout',   () => { drawNormal(); text.setColor('#ffffff'); });
-    zone.on('pointerdown',  () => { this.cameras.main.flash(200, 0, 0, 0, false); });
-    zone.on('pointerup',    callback);
-  }
-
-  _showHelp() {
-    // TODO: push a modal overlay scene or display rules text
-    console.log('How to Play – TODO');
-  }
-
-  _showCredits() {
-    console.log('Credits – TODO');
-  }
-}
+    zone.on('

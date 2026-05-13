@@ -1,6 +1,7 @@
 // ============================================================
 // UIScene – Persistent HUD overlay (runs on top of GameScene)
-// Shows balance, current bet, chip selector, and win/loss toasts
+// Chip tray, bet display, action cards, accuse button, toasts
+// Communication: GameScene ↔ UIScene via this.gs.events
 // ============================================================
 
 class UIScene extends Phaser.Scene {
@@ -9,146 +10,120 @@ class UIScene extends Phaser.Scene {
   }
 
   init(data) {
-    this.gameScene = data.gameScene;
+    this._balance      = (data && data.balance      != null) ? data.balance      : VI.GAME.DEFAULT_BALANCE;
+    this._suspectCount = (data && data.suspectCount != null) ? data.suspectCount : 4;
+    this._currentBet   = 0;
+    this._accumulatedBet = 0;
+    this._gs           = null;  // set in create() after GameScene is running
+    this._actionCooldown = false;
   }
 
   create() {
     const { width, height } = this.scale;
 
-    // ── Balance display ────────────────────────────────────────
-    this.balanceLabel = this.add.text(20, 20, '', {
-      fontFamily: VI.FONTS.HEADING,
-      fontSize:   '22px',
-      color:      VI.HEX.GOLD,
-      stroke:     '#000',
-      strokeThickness: 3,
-    });
-    this._updateBalance(this.gameScene.playerBalance);
+    // Get a reference to the running GameScene
+    this._gs = this.scene.get('GameScene');
 
-    // ── Bet display ────────────────────────────────────────────
-    this.betLabel = this.add.text(20, 54, 'BET: $0', {
-      fontFamily: VI.FONTS.BODY,
-      fontSize:   '16px',
-      color:      '#ffffff99',
-    });
+    // Bottom panel background
+    this._buildBottomPanel(height);
 
-    // ── Chip tray ─────────────────────────────────────────────
-    this._buildChipTray(width / 2, height - 44);
+    // Chip tray
+    this._buildChipTray(width, height);
 
-    // ── Event listeners from GameScene ─────────────────────────
-    this.gameScene.events.on('balanceChanged', this._updateBalance, this);
-    this.gameScene.events.on('roundResolved',  this._showToast,     this);
+    // Bet display
+    this._buildBetDisplay(width, height);
 
-    // Cleanup when UIScene stops
-    this.events.on('shutdown', () => {
-      this.gameScene.events.off('balanceChanged', this._updateBalance, this);
-      this.gameScene.events.off('roundResolved',  this._showToast,     this);
+    // Action card strip
+    this._buildActionStrip(width, height);
+
+    // ACCUSE button
+    this._buildAccuseButton(width, height);
+
+    // Toast layer (top of z-order)
+    this._toastY = 130;
+
+    // ── Listen for GameScene events ────────────────────────
+    const gs = this._gs;
+    gs.events.on('game:round_start',      (d)  => this._onRoundStart(d));
+    gs.events.on('game:folder_update',    (p)  => this._onFolderUpdate(p));
+    gs.events.on('game:suspect_selected', (d)  => this._onSuspectSelected(d));
+    gs.events.on('game:clue_revealed',    (d)  => this._showToast(`🔍 CLUE!`, VI.HEX.CYAN, 1200));
+    gs.events.on('game:second_chance',    ()   => this._showToast('🎲 SECOND CHANCE!', VI.HEX.VI_ORANGE, 2000));
+    gs.events.on('game:win',              (d)  => this._onWin(d));
+    gs.events.on('game:loss',             (d)  => this._onLoss(d));
+    gs.events.on('game:error',            (msg)=> this._showToast(`⚠ ${msg}`, VI.HEX.MAGENTA, 1800));
+    gs.events.on('game:timeout',          ()   => this._showToast('⏰ ACCUSE NOW!', VI.HEX.VI_RED, 2500));
+    gs.events.on('game:bet_updated',      (a)  => this._refreshBetDisplay(a));
+    gs.events.on('game:next_round',       (b)  => this._onNextRound(b));
+    gs.events.on('game:action_used',      (id) => this._disableActionCard(id));
+
+    this.events.once('shutdown', () => {
+      gs.events.off('game:round_start');
+      gs.events.off('game:folder_update');
+      gs.events.off('game:suspect_selected');
+      gs.events.off('game:clue_revealed');
+      gs.events.off('game:second_chance');
+      gs.events.off('game:win');
+      gs.events.off('game:loss');
+      gs.events.off('game:error');
+      gs.events.off('game:timeout');
+      gs.events.off('game:bet_updated');
+      gs.events.off('game:next_round');
+      gs.events.off('game:action_used');
     });
   }
 
-  // ── Private helpers ─────────────────────────────────────────
+  // ── Panel & layout ─────────────────────────────────────────
 
-  _updateBalance(amount) {
-    this.balanceLabel.setText(`BALANCE  $${amount.toLocaleString()}`);
+  _buildBottomPanel(height) {
+    const { width } = this.scale;
+    const panelH = 90;
+    const g = this.add.graphics();
+    g.fillStyle(VI.COLORS.PANEL_SURFACE, 0.95);
+    g.fillRect(0, height - panelH, width, panelH);
+    g.lineStyle(1, VI.COLORS.CYAN, 0.2);
+    g.lineBetween(0, height - panelH, width, height - panelH);
   }
 
-  _buildChipTray(cx, cy) {
-    const chips = VI.GAME.CHIP_DENOMINATIONS;
-    const spacing = 72;
-    const startX  = cx - ((chips.length - 1) / 2) * spacing;
+  // ── Chip tray ──────────────────────────────────────────────
 
-    // Tray background
-    const tw = chips.length * spacing + 40;
-    const g  = this.add.graphics();
-    g.fillStyle(VI.COLORS.BG_SURFACE, 0.85);
-    g.fillRoundedRect(startX - 56, cy - 28, tw, 56, 28);
-    g.lineStyle(1, VI.COLORS.GOLD, 0.4);
-    g.strokeRoundedRect(startX - 56, cy - 28, tw, 56, 28);
+  _buildChipTray(width, height) {
+    const chips    = VI.GAME.CHIP_DENOMINATIONS;
+    const spacing  = 66;
+    const panelH   = 90;
+    const cy       = height - panelH / 2;
+    const startX   = 60;
 
+    // Tray bg
+    const tw = chips.length * spacing + 20;
+    const tg = this.add.graphics();
+    tg.fillStyle(VI.COLORS.FLOOD_BLACK, 0.6);
+    tg.fillRoundedRect(startX - 24, cy - 26, tw, 52, 26);
+    tg.lineStyle(1, VI.COLORS.CYAN, 0.2);
+    tg.strokeRoundedRect(startX - 24, cy - 26, tw, 52, 26);
+
+    this._chipObjs = {};
     chips.forEach((value, i) => {
       const x = startX + i * spacing;
-      this._drawChip(x, cy, value);
+      this._chipObjs[value] = this._drawChip(x, cy, value);
     });
   }
 
   _drawChip(x, y, value) {
-    const CHIP_COLORS = {
-      1:   VI.COLORS.WHITE,
-      5:   0xff4444,
-      25:  0x44cc44,
-      100: VI.COLORS.NEON_BLUE,
-      500: VI.COLORS.GOLD,
-    };
+    const CHIP_COLORS = { 1: 0xffffff, 5: 0xff4444, 25: 0x44cc44, 100: VI.COLORS.CYAN, 500: VI.COLORS.GOLD };
+    const color = CHIP_COLORS[value] != null ? CHIP_COLORS[value] : VI.COLORS.VI_PURPLE;
+    const r     = 22;
 
     const g = this.add.graphics();
-    const color = CHIP_COLORS[value] ?? VI.COLORS.PURPLE;
-
-    // Outer ring
+    g.fillStyle(color, 0.22);
+    g.fillCircle(x, y, r);
     g.lineStyle(3, color, 1);
-    g.strokeCircle(x, y, 24);
-
-    // Fill
-    g.fillStyle(color, 0.25);
-    g.fillCircle(x, y, 24);
-
-    // Dash marks
-    g.lineStyle(2, color, 0.6);
-    for (let a = 0; a < 360; a += 45) {
-      const rad = Phaser.Math.DegToRad(a);
-      g.lineBetween(
-        x + Math.cos(rad) * 18, y + Math.sin(rad) * 18,
-        x + Math.cos(rad) * 24, y + Math.sin(rad) * 24,
-      );
+    g.strokeCircle(x, y, r);
+    // Dashes
+    g.lineStyle(2, color, 0.55);
+    for (let a = 0; a < 8; a++) {
+      const rad = Phaser.Math.DegToRad(a * 45);
+      g.lineBetween(x + Math.cos(rad) * 16, y + Math.sin(rad) * 16, x + Math.cos(rad) * r, y + Math.sin(rad) * r);
     }
 
-    // Value label
-    const label = value >= 100 ? `${value / 100}C` : `${value}`;
-    const txt = this.add.text(x, y, label, {
-      fontFamily: VI.FONTS.HEADING,
-      fontSize:   '11px',
-      color:      '#fff',
-    }).setOrigin(0.5);
-
-    // Hit area
-    const zone = this.add.zone(x, y, 52, 52).setInteractive({ cursor: 'pointer' });
-    zone.on('pointerover',  () => { g.setScale(1.15); txt.setScale(1.15); });
-    zone.on('pointerout',   () => { g.setScale(1);    txt.setScale(1); });
-    zone.on('pointerup',    () => {
-      this.gameScene.placeBet(value);
-      this.betLabel.setText(`BET: $${this.gameScene.currentBet}`);
-    });
-  }
-
-  _showToast({ winnings, multiplier }) {
-    const { width } = this.scale;
-    const isWin  = multiplier > 1;
-    const msg    = isWin ? `WIN  +$${winnings}` : `LOSS  -$${Math.abs(winnings)}`;
-    const colour = isWin ? VI.HEX.GOLD : '#ff4444';
-
-    const toast = this.add.text(width / 2, 120, msg, {
-      fontFamily: VI.FONTS.HEADING,
-      fontSize:   '36px',
-      color:      colour,
-      stroke:     '#000',
-      strokeThickness: 4,
-    }).setOrigin(0.5).setAlpha(0);
-
-    this.tweens.add({
-      targets:  toast,
-      alpha:    { from: 0, to: 1 },
-      y:        { from: 140, to: 100 },
-      duration: 300,
-      ease:     'Back.Out',
-      onComplete: () => {
-        this.tweens.add({
-          targets:  toast,
-          alpha:    0,
-          y:        70,
-          delay:    1200,
-          duration: 400,
-          onComplete: () => toast.destroy(),
-        });
-      },
-    });
-  }
-}
+    const label = value >= 100 ? `$

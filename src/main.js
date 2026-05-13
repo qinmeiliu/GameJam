@@ -17,6 +17,7 @@ const config = {
     BootScene,
     PreloadScene,
     MenuScene,
+    LobbyScene,
     GameScene,
     UIScene,
   ],
@@ -26,4 +27,4 @@ const config = {
 };
 
 // Boot the game
-const game = new Phaser.Game(config);
+const game = new Phase

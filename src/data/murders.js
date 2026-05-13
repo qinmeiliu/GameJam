@@ -92,6 +92,29 @@ const MURDER_DATA = {
     ],
   },
 
+  // ──────────────────────────────────────────────────────────
+  //  ACTION CATALOG — GDD v0.4 canonical 8 blackjack-style actions
+  //  Single source of truth: id, display, colour, math semantics
+  // ──────────────────────────────────────────────────────────
+  actions: [
+    { id: 'DOUBLE_DOWN', label: 'DBL\nDOWN',  short: 'DOUBLE DOWN', icon: '⬆',  color: 0xfc6b23, /* VI_ORANGE */
+      desc: 'gross × 2. Locks current bet.',                          riskTier: 'reward'  },
+    { id: 'INSURANCE',   label: 'INSUR-\nANCE',short: 'INSURANCE',  icon: '🛡', color: 0x2afeff, /* CYAN */
+      desc: '+20% to bet. If wrong, 50% refund.',                     riskTier: 'safe'    },
+    { id: 'SPLIT',       label: 'SPLIT',       short: 'SPLIT',       icon: '✂', color: 0xfde054, /* GOLD */
+      desc: 'gross × 0.5. Bet covers 2 suspects.',                    riskTier: 'safe'    },
+    { id: 'CASH_OUT',    label: 'CASH\nOUT',   short: 'CASH OUT',    icon: '💸', color: 0xfde054, /* GOLD */
+      desc: 'End round now: bet × 0.65 × folder mult.',               riskTier: 'safe'    },
+    { id: 'PRESS',       label: 'PRESS\nLUCK', short: 'PRESS YOUR LUCK', icon: '🔥', color: 0xfc6b23, /* VI_ORANGE */
+      desc: 'Folder burns 3× faster. Payout unchanged.',              riskTier: 'risky'   },
+    { id: 'CHAOS_ROLL',  label: 'CHAOS\nROLL', short: 'CHAOS ROLL',  icon: '🎲', color: 0x9500c6, /* VI_PURPLE */
+      desc: 'gross × random(0.5×–3.0×).',                              riskTier: 'chaos'   },
+    { id: 'LOCK_IN',     label: 'LOCK\nIN',    short: 'LOCK IN',     icon: '🔒', color: 0x1729ff, /* VI_BLUE */
+      desc: 'Freeze folder multiplier at current value.',             riskTier: 'safe'    },
+    { id: 'SIDE_SWAP',   label: 'SIDE\nSWAP',  short: 'SIDE SWAP',   icon: '🔄', color: 0xfd009f, /* MAGENTA */
+      desc: 'Cycle your suspect to the next one in line.',            riskTier: 'risky'   },
+  ],
+
   // Clue reveals: funny object + betting action unlocked
   clueEvents: [
     { object: 'a half-eaten crumpet',       duckyDoes: 'eats the evidence immediately',       action: 'DOUBLE_DOWN',  label: '⬆ DOUBLE DOWN',     desc: 'Double your bet. Locked odds.' },

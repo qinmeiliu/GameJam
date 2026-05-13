@@ -209,17 +209,11 @@ class UIScene extends Phaser.Scene {
   // ── Action card strip ──────────────────────────────────────
 
   _buildActionStrip(width, height) {
-    const cards = [
-      { id: 'EXTRA_CLUE', label: 'EXTRA\nCLUE',    color: VI.COLORS.VI_BLUE   },
-      { id: 'ELIMINATE',  label: 'ELIM-\nINATE',   color: VI.COLORS.MAGENTA   },
-      { id: 'LOCK_IN',    label: 'LOCK\nIN',        color: VI.COLORS.VI_BLUE   },
-      { id: 'DOUBLE_DOWN',label: 'DBL\nDOWN',       color: VI.COLORS.VI_ORANGE },
-      { id: 'CHAOS_ROLL', label: 'CHAOS\nROLL',     color: VI.COLORS.VI_PURPLE },
-      { id: 'INSURANCE',  label: 'INSUR-\nANCE',    color: VI.COLORS.CYAN      },
-    ];
+    // Pull GDD-canonical 8 action set from murders.js (single source of truth)
+    const cards = (MURDER_DATA && MURDER_DATA.actions) ? MURDER_DATA.actions : [];
 
-    const cw = 62, ch = 68;
-    const gap = 6;
+    const cw = 58, ch = 64;
+    const gap = 4;
     const totalW = cards.length * (cw + gap) - gap;
     const startX = (width - totalW) / 2;
     const y      = height - 90 - ch / 2 - 8;

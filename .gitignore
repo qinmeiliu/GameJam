@@ -20,3 +20,9 @@ build/
 # Env / secrets
 .env
 .env.local
+
+# Temporary / scratch files from editing
+*.new
+*.bak
+*.orig
+*.tmp

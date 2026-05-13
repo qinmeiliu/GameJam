@@ -18,40 +18,88 @@ class MenuScene extends Phaser.Scene {
     // ── Decorative neon lines ─────────────────────────────────
     this._drawNeonAccents();
 
-    // ── Logo / Title ──────────────────────────────────────────
-    // Swap text for this.add.image once the logo asset is ready:
-    // this.add.image(cx, 140, 'logo').setOrigin(0.5);
-    this.add.text(cx, 90, 'VEGAS INFINITE', {
+    // ── Pre-title eyebrow (VI brand presence, kept small) ─────
+    this.add.text(cx, 70, 'VEGAS INFINITE  ·  GAME JAM', {
+      fontFamily: VI.FONTS.BODY,
+      fontSize: '12px',
+      color: VI.HEX.CYAN,
+      letterSpacing: 6,
+      alpha: 0.7,
+    }).setOrigin(0.5);
+
+    // ── Game Title ────────────────────────────────────────────
+    // Two-line stacked title: THE DUCKY / DETECTIVE AGENCY
+    this.add.text(cx, 130, 'THE DUCKY', {
       fontFamily: VI.FONTS.HEADING,
-      fontSize: '52px',
+      fontSize: '64px',
       color: VI.HEX.GOLD,
       stroke: '#000000',
       strokeThickness: 6,
-      shadow: { blur: 20, color: VI.HEX.GOLD, fill: true },
+      shadow: { blur: 24, color: VI.HEX.GOLD, fill: true },
+      letterSpacing: 6,
     }).setOrigin(0.5);
 
-    this.add.text(cx, 152, 'GAME JAM', {
-      fontFamily: VI.FONTS.BODY,
-      fontSize: '22px',
+    this.add.text(cx, 196, 'DETECTIVE AGENCY', {
+      fontFamily: VI.FONTS.HEADING,
+      fontSize: '52px',
       color: VI.HEX.CYAN,
-      letterSpacing: 12,
+      stroke: '#000000',
+      strokeThickness: 5,
+      shadow: { blur: 18, color: VI.HEX.CYAN, fill: true },
+      letterSpacing: 8,
+    }).setOrigin(0.5);
+
+    // ── Tagline (GDD epigraph) ────────────────────────────────
+    this.add.text(cx, 248, '"Every crime has a culprit. Every clue is nonsense. Every bet is faith."', {
+      fontFamily: VI.FONTS.BODY,
+      fontSize: '14px',
+      color: VI.HEX.CREAM,
+      alpha: 0.55,
+      fontStyle: 'italic',
     }).setOrigin(0.5);
 
     // ── Ducky placeholder ──────────────────────────────────────
-    // Replace this rect with: this.add.image(cx, 370, 'ducky').setOrigin(0.5);
-    this._drawDuckyPlaceholder(cx, 370);
+    // Replace this rect with: this.add.image(cx, 400, 'ducky').setOrigin(0.5);
+    this._drawDuckyPlaceholder(cx, 400);
 
-    // ── Buttons ───────────────────────────────────────────────
-    this._addButton(cx, 550, '▶  PLAY',         () => this.scene.start('LobbyScene', { balance: VI.GAME.DEFAULT_BALANCE }));
-    this._addButton(cx, 618, 'HOW TO PLAY',      () => this._showHelp());
-    this._addButton(cx, 686, 'CREDITS',           () => this._showCredits());
+    // ── Primary action: PLAY (dominant) ────────────────────────
+    this._addPrimaryButton(cx, 560, '▶  PLAY', () => this._startGame());
+
+    // ── Secondary actions ─────────────────────────────────────
+    this._addSecondaryButton(cx - 110, 632, 'HOW TO PLAY', () => this._showHelp());
+    this._addSecondaryButton(cx + 110, 632, 'CREDITS',     () => this._showCredits());
 
     // ── Version stamp ─────────────────────────────────────────
-    this.add.text(width - 16, height - 16, 'v0.1.0 – Game Jam Build', {
+    this.add.text(width - 16, height - 16, 'v0.2.0 – Sprint 1', {
       fontFamily: VI.FONTS.MONO,
       fontSize: '11px',
       color: '#ffffff33',
     }).setOrigin(1, 1);
+
+    // ── Press SPACE/ENTER hint ────────────────────────────────
+    this._pressHint = this.add.text(cx, 605, 'PRESS  SPACE  OR  ENTER  TO  PLAY', {
+      fontFamily: VI.FONTS.MONO,
+      fontSize: '10px',
+      color: VI.HEX.CYAN,
+      letterSpacing: 4,
+      alpha: 0.55,
+    }).setOrigin(0.5);
+    this.tweens.add({
+      targets: this._pressHint, alpha: { from: 0.2, to: 0.7 },
+      duration: 1200, yoyo: true, repeat: -1, ease: 'Sine.easeInOut',
+    });
+
+    // Keyboard shortcuts: SPACE/ENTER start the game
+    const k = this.input.keyboard;
+    k.on('keydown-SPACE', () => this._startGame());
+    k.on('keydown-ENTER', () => this._startGame());
+  }
+
+  _startGame() {
+    if (this._launched) return;
+    this._launched = true;
+    this.cameras.main.flash(200, 253, 224, 84, false);
+    this.scene.start('LobbyScene', { balance: VI.GAME.DEFAULT_BALANCE });
   }
 
   // ── Private helpers ─────────────────────────────────────────
@@ -120,44 +168,168 @@ class MenuScene extends Phaser.Scene {
     }).setOrigin(0.5);
   }
 
-  _addButton(x, y, label, callback) {
+  // Primary CTA — dominant, glowing magenta-to-purple with gold border
+  _addPrimaryButton(x, y, label, callback) {
     const btn = this.add.graphics();
-    const bw = 280, bh = 48;
+    const bw = 360, bh = 62;
 
     const drawNormal = () => {
       btn.clear();
-      btn.fillStyle(VI.COLORS.PANEL_SURFACE, 0.9);
-      btn.fillRoundedRect(x - bw / 2, y - bh / 2, bw, bh, 8);
-      btn.lineStyle(1, VI.COLORS.GOLD, 0.6);
-      btn.strokeRoundedRect(x - bw / 2, y - bh / 2, bw, bh, 8);
+      btn.fillStyle(VI.COLORS.VI_PURPLE, 1);
+      btn.fillRoundedRect(x - bw / 2, y - bh / 2, bw, bh, 10);
+      btn.lineStyle(2, VI.COLORS.GOLD, 0.8);
+      btn.strokeRoundedRect(x - bw / 2, y - bh / 2, bw, bh, 10);
     };
-
     const drawHover = () => {
       btn.clear();
-      btn.fillStyle(VI.COLORS.VI_PURPLE, 1);
-      btn.fillRoundedRect(x - bw / 2, y - bh / 2, bw, bh, 8);
-      btn.lineStyle(2, VI.COLORS.GOLD, 1);
-      btn.strokeRoundedRect(x - bw / 2, y - bh / 2, bw, bh, 8);
+      btn.fillStyle(VI.COLORS.MAGENTA, 1);
+      btn.fillRoundedRect(x - bw / 2, y - bh / 2, bw, bh, 10);
+      btn.lineStyle(3, VI.COLORS.GOLD, 1);
+      btn.strokeRoundedRect(x - bw / 2, y - bh / 2, bw, bh, 10);
     };
-
     drawNormal();
 
     const text = this.add.text(x, y, label, {
       fontFamily: VI.FONTS.HEADING,
-      fontSize: '18px',
-      color: '#ffffff',
+      fontSize: '26px',
+      color: VI.HEX.GOLD,
+      stroke: '#000', strokeThickness: 4,
+      letterSpacing: 4,
+    }).setOrigin(0.5);
+
+    // Gentle "ready to play" pulse on the border so the eye lands here first
+    this.tweens.add({
+      targets: btn, alpha: { from: 0.85, to: 1 },
+      duration: 900, yoyo: true, repeat: -1, ease: 'Sine.easeInOut',
+    });
+
+    const zone = this.add.zone(x, y, bw, bh).setInteractive({ cursor: 'pointer' });
+    zone.on('pointerover',  () => { drawHover();  text.setColor('#ffffff'); });
+    zone.on('pointerout',   () => { drawNormal(); text.setColor(VI.HEX.GOLD); });
+    zone.on('pointerdown',  () => this.cameras.main.flash(200, 253, 224, 84, false));
+    zone.on('pointerup',    callback);
+  }
+
+  // Secondary actions — compact, low-contrast, easy to ignore
+  _addSecondaryButton(x, y, label, callback) {
+    const btn = this.add.graphics();
+    const bw = 180, bh = 38;
+
+    const drawNormal = () => {
+      btn.clear();
+      btn.fillStyle(VI.COLORS.PANEL_SURFACE, 0.9);
+      btn.fillRoundedRect(x - bw / 2, y - bh / 2, bw, bh, 6);
+      btn.lineStyle(1, VI.COLORS.CYAN, 0.4);
+      btn.strokeRoundedRect(x - bw / 2, y - bh / 2, bw, bh, 6);
+    };
+    const drawHover = () => {
+      btn.clear();
+      btn.fillStyle(VI.COLORS.PANEL_SURFACE, 1);
+      btn.fillRoundedRect(x - bw / 2, y - bh / 2, bw, bh, 6);
+      btn.lineStyle(2, VI.COLORS.CYAN, 1);
+      btn.strokeRoundedRect(x - bw / 2, y - bh / 2, bw, bh, 6);
+    };
+    drawNormal();
+
+    const text = this.add.text(x, y, label, {
+      fontFamily: VI.FONTS.HEADING,
+      fontSize: '13px',
+      color: VI.HEX.CREAM,
+      letterSpacing: 3,
     }).setOrigin(0.5);
 
     const zone = this.add.zone(x, y, bw, bh).setInteractive({ cursor: 'pointer' });
-    zone.on('pointerover',  () => { drawHover(); text.setColor(VI.HEX.GOLD); });
-    zone.on('pointerout',   () => { drawNormal(); text.setColor('#ffffff'); });
-    zone.on('pointerdown',  () => { this.cameras.main.flash(200, 0, 0, 0, false); });
+    zone.on('pointerover',  () => { drawHover();  text.setColor(VI.HEX.CYAN); });
+    zone.on('pointerout',   () => { drawNormal(); text.setColor(VI.HEX.CREAM); });
     zone.on('pointerup',    callback);
   }
 
   _showHelp() {
-    // TODO: push a modal overlay scene or display rules text
-    console.log('How to Play – TODO');
+    if (this._modalOpen) return;
+    this._modalOpen = true;
+    const { width, height } = this.scale;
+    const cx = width / 2, cy = height / 2;
+
+    const overlay = this.add.graphics();
+    overlay.fillStyle(0x000000, 0.78);
+    overlay.fillRect(0, 0, width, height);
+    overlay.setDepth(100);
+
+    const pw = 640, ph = 460;
+    const panel = this.add.graphics().setDepth(101);
+    panel.fillStyle(VI.COLORS.PANEL_SURFACE, 1);
+    panel.fillRoundedRect(cx - pw/2, cy - ph/2, pw, ph, 14);
+    panel.lineStyle(2, VI.COLORS.CYAN, 0.9);
+    panel.strokeRoundedRect(cx - pw/2, cy - ph/2, pw, ph, 14);
+
+    const title = this.add.text(cx, cy - ph/2 + 36, 'HOW TO PLAY', {
+      fontFamily: VI.FONTS.HEADING, fontSize: '28px',
+      color: VI.HEX.GOLD, letterSpacing: 6,
+      shadow: { blur: 12, color: VI.HEX.GOLD, fill: true },
+    }).setOrigin(0.5).setDepth(102);
+
+    const body = [
+      '1.  PICK YOUR ROOM.  Choose 3–6 suspects. More suspects = bigger payout, worse odds.',
+      '',
+      '2.  PLACE YOUR BET.  Stack chips, lock in a suspect. Bet early (folder > 60%)',
+      '     for the +15% EARLY BIRD bonus.',
+      '',
+      '3.  PLAY ACTION CARDS.  As the folder burns, use blackjack-style moves:',
+      '     DOUBLE DOWN, INSURANCE, CASH OUT, CHAOS ROLL, LOCK IN, SIDE SWAP, PRESS, SPLIT.',
+      '',
+      '4.  ACCUSE.  Wrong on Acc #1 → SECOND CHANCE: 15 seconds, folder burns 3× faster,',
+      '     payouts capped at 40%. Wrong twice = COLD CASE.',
+      '',
+      '5.  THE TWIST.  The killer is pure RNG. Clues are nonsense. Trust scores are theatre.',
+      '     You are a gambler dressed as a detective.',
+    ].join('\n');
+
+    const text = this.add.text(cx, cy + 4, body, {
+      fontFamily: VI.FONTS.BODY, fontSize: '14px',
+      color: VI.HEX.CREAM, lineSpacing: 4,
+      align: 'left', wordWrap: { width: pw - 60 },
+    }).setOrigin(0.5).setDepth(102);
+
+    // Close button (X) top-right of panel
+    const closeX = cx + pw/2 - 26, closeY = cy - ph/2 + 26;
+    const closeG = this.add.graphics().setDepth(102);
+    const drawClose = (hover) => {
+      closeG.clear();
+      closeG.lineStyle(2, hover ? VI.COLORS.MAGENTA : VI.COLORS.CREAM, hover ? 1 : 0.5);
+      closeG.lineBetween(closeX - 8, closeY - 8, closeX + 8, closeY + 8);
+      closeG.lineBetween(closeX - 8, closeY + 8, closeX + 8, closeY - 8);
+    };
+    drawClose(false);
+    const closeZone = this.add.zone(closeX, closeY, 28, 28).setInteractive({ cursor: 'pointer' }).setDepth(103);
+    closeZone.on('pointerover', () => drawClose(true));
+    closeZone.on('pointerout',  () => drawClose(false));
+
+    // GOT IT button at bottom of panel
+    const gw = 160, gh = 38;
+    const gx = cx, gy = cy + ph/2 - 38;
+    const gotitG = this.add.graphics().setDepth(102);
+    const drawGotIt = (hover) => {
+      gotitG.clear();
+      gotitG.fillStyle(hover ? VI.COLORS.MAGENTA : VI.COLORS.VI_PURPLE, 1);
+      gotitG.fillRoundedRect(gx - gw/2, gy - gh/2, gw, gh, 8);
+      gotitG.lineStyle(1, VI.COLORS.GOLD, hover ? 1 : 0.7);
+      gotitG.strokeRoundedRect(gx - gw/2, gy - gh/2, gw, gh, 8);
+    };
+    drawGotIt(false);
+    const gotitLbl = this.add.text(gx, gy, 'GOT IT  ✓', {
+      fontFamily: VI.FONTS.HEADING, fontSize: '14px',
+      color: VI.HEX.GOLD, letterSpacing: 4,
+    }).setOrigin(0.5).setDepth(103);
+    const gotitZone = this.add.zone(gx, gy, gw, gh).setInteractive({ cursor: 'pointer' }).setDepth(103);
+    gotitZone.on('pointerover', () => { drawGotIt(true);  gotitLbl.setColor('#ffffff'); });
+    gotitZone.on('pointerout',  () => { drawGotIt(false); gotitLbl.setColor(VI.HEX.GOLD); });
+
+    const closeModal = () => {
+      [overlay, panel, title, text, closeG, closeZone, gotitG, gotitLbl, gotitZone].forEach(o => o && o.destroy());
+      this._modalOpen = false;
+    };
+    closeZone.on('pointerup', closeModal);
+    gotitZone.on('pointerup', closeModal);
   }
 
   _showCredits() {

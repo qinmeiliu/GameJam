@@ -55,6 +55,28 @@ const VI = {
     BODY:     2,   // Capitana Light spec from Brand Bible
   },
 
+  // --- Round Phase State Machine ---
+  // Single source of truth for the round flow. Each phase is a named
+  // state in GameScene; transitions emit 'game:phase_change' for the UI.
+  PHASES: {
+    INTRO:         'INTRO',          // case file slams in, room reveals (~1.5s)
+    BETTING:       'BETTING',        // bets open, clue events fire on timers, actions usable
+    ACCUSATION_1:  'ACCUSATION_1',   // first accusation submitted, resolving
+    SECOND_CHANCE: 'SECOND_CHANCE',  // wrong#1 → 15s reduced window, no actions
+    ACCUSATION_2:  'ACCUSATION_2',   // second accusation submitted, resolving
+    SCOREBOARD:    'SCOREBOARD',     // round-end overlay; awaiting NEXT CASE
+  },
+
+  // --- Phase Timings (ms) — calibrated to GDD v0.4 round flow ---
+  PHASE_TIMINGS: {
+    INTRO_MS:           1500,    // case-reveal hold before betting opens
+    BETTING_TOTAL_MS:  45000,    // matches folder burn duration
+    CLUE_1_AT_MS:      12000,    // first clue fires from BETTING start
+    CLUE_2_AT_MS:      24000,    // second clue fires
+    LAST_CALL_AT_MS:   35000,    // folder ~22% — soft warning
+    SECOND_CHANCE_MS:  15000,    // GDD: 15-second reduced window
+  },
+
   // --- Game Config ---
   GAME: {
     WIDTH:  1280,

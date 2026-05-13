@@ -15,17 +15,21 @@ class GameScene extends Phaser.Scene {
     this.gs = {
       balance:       (data && data.balance      != null) ? data.balance      : VI.GAME.DEFAULT_BALANCE,
       suspectCount:  (data && data.suspectCount != null) ? data.suspectCount : 4,
-      round:         null,      // RoundController instance
-      state:         'playing', // 'playing' | 'second_chance' | 'finished'
-      selectedIdx:   -1,        // which suspect the player has highlighted
+      round:         null,                 // RoundController instance
+      phase:         VI.PHASES.INTRO,      // canonical round phase
+      state:         'playing',            // LEGACY: kept as alias so existing checks keep working
+      selectedIdx:   -1,                   // which suspect the player has highlighted
       bet:           0,
       wrongCount:    0,
     };
-    this._folderPct    = 1.0;
-    this._timerElapsed = 0;
-    this._timerExpired = false;
-    this._clueRevealed = [false, false];
-    this._burnTimer    = null;
+    this._folderPct       = 1.0;
+    this._timerElapsed    = 0;
+    this._timerExpired    = false;
+    this._clueRevealed    = [false, false];
+    this._burnTimer       = null;
+    this._burnMultiplier  = 1;     // PRESS sets this to 3
+    this._suspectLockedByAction = false;  // DOUBLE_DOWN locks suspect choice
+    this._phaseTimers     = [];    // active delayedCall handles per phase (cleared on exit)
   }
 
   create() {
@@ -78,16 +82,17 @@ class GameScene extends Phaser.Scene {
     gs.bet         = 0;
     gs.wrongCount  = 0;
 
-    this._folderPct    = 1.0;
-    this._clueRevealed = [false, false];
-    this._timerElapsed = 0;
-    this._timerExpired = false;
+    this._folderPct      = 1.0;
+    this._clueRevealed   = [false, false];
+    this._timerElapsed   = 0;
+    this._timerExpired   = false;
+    this._burnMultiplier = 1;
+    this._suspectLockedByAction = false;
 
     this._refreshCasePanel();
     this._refreshSuspects();
     this._refreshFolderBar();
     this._clearClueFeed();
-    this._addClue('🦆 Ducky has a new case. Study the suspects…', VI.HEX.CYAN);
 
     // Emit round start to UIScene
     this.events.emit('game:round_start', {
@@ -96,18 +101,157 @@ class GameScene extends Phaser.Scene {
       suspects:     gs.round.suspects,
     });
 
+    // Kick off the phase state machine at INTRO
+    this._setPhase(VI.PHASES.INTRO);
+  }
+
+  // ── Phase state machine ────────────────────────────────────
+  //
+  // Transitions: INTRO → BETTING → (ACCUSATION_1 → SECOND_CHANCE → ACCUSATION_2)? → SCOREBOARD
+  //
+  // Single entry point: _setPhase(name). Runs _exit_<old>() then
+  // _enter_<new>(). Each phase owns its delayedCalls via _scheduleInPhase
+  // so we never leak timers across transitions.
+
+  _setPhase(next) {
+    const prev = this.gs.phase;
+    if (prev === next) return;
+
+    // Exit hook
+    const exitFn = this[`_exit_${prev}`];
+    if (typeof exitFn === 'function') exitFn.call(this);
+    this._clearPhaseTimers();
+
+    this.gs.phase = next;
+    // LEGACY alias — keep .state in sync for code paths that still check it.
+    // Most UI gates check `gs.state === 'playing'`; that's true during
+    // BETTING and SECOND_CHANCE so the player can still interact.
+    if (next === VI.PHASES.SCOREBOARD) {
+      this.gs.state = 'finished';
+    } else if (next === VI.PHASES.ACCUSATION_1 || next === VI.PHASES.ACCUSATION_2) {
+      this.gs.state = 'resolving';
+    } else {
+      this.gs.state = 'playing';
+    }
+
+    this.events.emit('game:phase_change', { phase: next, prev });
+
+    // Enter hook
+    const enterFn = this[`_enter_${next}`];
+    if (typeof enterFn === 'function') enterFn.call(this);
+  }
+
+  _scheduleInPhase(ms, cb) {
+    const handle = this.time.delayedCall(ms, () => {
+      // remove from list when fired
+      this._phaseTimers = this._phaseTimers.filter(t => t !== handle);
+      cb();
+    });
+    this._phaseTimers.push(handle);
+    return handle;
+  }
+
+  _clearPhaseTimers() {
+    this._phaseTimers.forEach(t => { if (t && t.remove) t.remove(); });
+    this._phaseTimers = [];
+  }
+
+  // ── Phase: INTRO ───────────────────────────────────────────
+  _enter_INTRO() {
+    this._addClue('🦆 Ducky has a new case. Study the suspects…', VI.HEX.CYAN);
+    this._scheduleInPhase(VI.PHASE_TIMINGS.INTRO_MS, () => this._setPhase(VI.PHASES.BETTING));
+  }
+
+  // ── Phase: BETTING ─────────────────────────────────────────
+  _enter_BETTING() {
+    this._addClue('💼 Folder ignited. Place your bet.', VI.HEX.VI_AMBER);
     // Folder burn timer — ticks every 250ms
     this._stopTimer();
     this._burnTimer = this.time.addEvent({
-      delay: 250,
-      loop:  true,
-      callback: this._burnTick,
-      callbackScope: this,
+      delay: 250, loop: true,
+      callback: this._burnTick, callbackScope: this,
     });
-
     // Schedule clue reveals
-    this.time.delayedCall(12000, () => this._revealClue(0));
-    this.time.delayedCall(24000, () => this._revealClue(1));
+    this._scheduleInPhase(VI.PHASE_TIMINGS.CLUE_1_AT_MS, () => this._revealClue(0));
+    this._scheduleInPhase(VI.PHASE_TIMINGS.CLUE_2_AT_MS, () => this._revealClue(1));
+    this._scheduleInPhase(VI.PHASE_TIMINGS.LAST_CALL_AT_MS, () => {
+      if (this.gs.phase === VI.PHASES.BETTING) {
+        this._addClue('⏰ LAST CALL — folder almost spent!', VI.HEX.VI_ORANGE);
+      }
+    });
+  }
+  _exit_BETTING() {
+    this._stopTimer();
+  }
+
+  // ── Phase: ACCUSATION_1 ────────────────────────────────────
+  _enter_ACCUSATION_1() {
+    this._stopTimer();
+    const gs = this.gs;
+    const correct = (gs.selectedIdx === gs.round.killerIdx);
+    if (correct) {
+      this._resolveWin(false);
+    } else {
+      gs.wrongCount = 1;
+      this._setPhase(VI.PHASES.SECOND_CHANCE);
+    }
+  }
+
+  // ── Phase: SECOND_CHANCE ───────────────────────────────────
+  _enter_SECOND_CHANCE() {
+    const gs = this.gs;
+    const wrongIdx = gs.selectedIdx;
+    const wrongSpr = this._suspectSprites[wrongIdx];
+    if (wrongSpr) {
+      this.tweens.add({
+        targets: [wrongSpr.g, wrongSpr.nameText, wrongSpr.subtextText, wrongSpr.numText],
+        alpha: 0.15, duration: 400,
+      });
+      wrongSpr.zone.disableInteractive();
+    }
+    this._addClue(`❌ WRONG! ${gs.round.suspects[wrongIdx].name} is innocent.`, VI.HEX.MAGENTA);
+    this._addClue('🎲 SECOND CHANCE — folder burns 3× faster, 15s left!', VI.HEX.VI_ORANGE);
+
+    gs.selectedIdx = -1;
+    this._refreshSuspectHighlights();
+
+    // Resume burn ticker (wrongCount=1 makes it 3× per _burnTick)
+    this._stopTimer();
+    this._burnTimer = this.time.addEvent({
+      delay: 250, loop: true,
+      callback: this._burnTick, callbackScope: this,
+    });
+    // Hard 15s timeout → auto-resolve as loss if no accusation
+    this._scheduleInPhase(VI.PHASE_TIMINGS.SECOND_CHANCE_MS, () => {
+      if (this.gs.phase === VI.PHASES.SECOND_CHANCE) {
+        this._addClue('⏰ Second chance timed out. Case closed.', VI.HEX.VI_RED);
+        this._resolveLoss();
+      }
+    });
+    this.events.emit('game:second_chance');
+  }
+  _exit_SECOND_CHANCE() {
+    this._stopTimer();
+  }
+
+  // ── Phase: ACCUSATION_2 ────────────────────────────────────
+  _enter_ACCUSATION_2() {
+    const gs = this.gs;
+    const correct = (gs.selectedIdx === gs.round.killerIdx);
+    if (correct) {
+      this._resolveWin(true);   // 2nd-accusation penalty applied
+    } else {
+      gs.wrongCount = 2;
+      this._resolveLoss();
+    }
+  }
+
+  // ── Phase: SCOREBOARD ──────────────────────────────────────
+  _enter_SCOREBOARD() {
+    // Visual handled by _showResultOverlay() which is called from
+    // _resolveWin / _resolveLoss right before transitioning here.
+    // Phase entry just emits a clean event for the UI to react to.
+    this.events.emit('game:scoreboard');
   }
 
   _stopTimer() {
@@ -116,8 +260,17 @@ class GameScene extends Phaser.Scene {
 
   _burnTick() {
     if (this.gs.state !== 'playing') return;
+    if (this.gs.round._lockedFolder !== null) {
+      // LOCK_IN active: folder integrity still drains visually but the
+      // multiplier used in payout math is frozen. Keep ticking the
+      // timer so the player can't camp forever.
+    }
 
-    const speed     = this.gs.wrongCount > 0 ? 3 : 1;
+    // Burn speed: base + wrong-accusation penalty (3×) + PRESS action (3×)
+    const wrongMult = this.gs.wrongCount > 0 ? 3 : 1;
+    const actionMult = this._burnMultiplier || 1;
+    const speed     = wrongMult * actionMult;
+
     const totalSecs = 45;
     const tickSecs  = 0.25 * speed;
     const floor     = 0.20;
@@ -389,82 +542,72 @@ class GameScene extends Phaser.Scene {
   // ── Accusation flow ────────────────────────────────────────
 
   _onBetConfirmed(amt) {
+    // Only accept bets during the open phases
+    const okPhases = [VI.PHASES.BETTING, VI.PHASES.SECOND_CHANCE];
+    if (!okPhases.includes(this.gs.phase)) return;
     this.gs.bet = amt;
-    this._addClue(`💰 Bet placed: $${amt}`, VI.HEX.VI_AMBER);
+    // Early Bird: bet locked while folder > 60% → +15% bonus at payout
+    if (this.gs.round && this.gs.round.registerBetLock) {
+      this.gs.round.registerBetLock(this._folderPct);
+    }
+    const eb = (this._folderPct > 0.60) ? '  ★ EARLY BIRD +15%' : '';
+    this._addClue(`💰 Bet placed: $${amt}${eb}`, VI.HEX.VI_AMBER);
   }
 
   _onSuspectSelect(idx) {
+    if (this._suspectLockedByAction) {
+      this.events.emit('game:error', 'Suspect locked by DOUBLE DOWN');
+      return;
+    }
     this.gs.selectedIdx = idx;
     this._refreshSuspectHighlights();
   }
 
   _onAccuse() {
     const gs = this.gs;
-    if (gs.state !== 'playing') return;
+    // Only allow accusation during BETTING or SECOND_CHANCE
+    if (gs.phase !== VI.PHASES.BETTING && gs.phase !== VI.PHASES.SECOND_CHANCE) return;
     if (gs.selectedIdx < 0) { this.events.emit('game:error', 'Select a suspect first!'); return; }
     if (gs.bet <= 0)         { this.events.emit('game:error', 'Place a bet first!');     return; }
 
-    this._stopTimer();
-    const correct = (gs.selectedIdx === gs.round.killerIdx);
-
-    if (correct) {
-      this._resolveWin();
-    } else {
-      gs.wrongCount++;
-      if (gs.wrongCount === 1) {
-        this._showSecondChance();
-      } else {
-        this._resolveLoss();
-      }
-    }
+    // Transition into the appropriate accusation phase
+    const targetPhase = (gs.phase === VI.PHASES.SECOND_CHANCE)
+      ? VI.PHASES.ACCUSATION_2
+      : VI.PHASES.ACCUSATION_1;
+    this._setPhase(targetPhase);
   }
 
-  _showSecondChance() {
+  _resolveWin(secondAccusation) {
     const gs = this.gs;
-    const wrongIdx = gs.selectedIdx;
-    const wrongSpr = this._suspectSprites[wrongIdx];
-    if (wrongSpr) {
-      this.tweens.add({ targets: [wrongSpr.g, wrongSpr.nameText, wrongSpr.subtextText, wrongSpr.numText], alpha: 0.15, duration: 400 });
-      wrongSpr.zone.disableInteractive();
-    }
-    this._addClue(`❌ WRONG! ${gs.round.suspects[wrongIdx].name} is innocent.`, VI.HEX.MAGENTA);
-    this._addClue('🎲 SECOND CHANCE — folder burns 3× faster!', VI.HEX.VI_ORANGE);
-
-    gs.state       = 'playing';
-    gs.selectedIdx = -1;
-    this._refreshSuspectHighlights();
-
-    this._burnTimer = this.time.addEvent({
-      delay: 250, loop: true,
-      callback: this._burnTick, callbackScope: this,
-    });
-    this.events.emit('game:second_chance');
-  }
-
-  _resolveWin() {
-    const gs = this.gs;
-    gs.state = 'finished';
-    const payout   = gs.round.calculatePayout(gs.bet, gs.selectedIdx, this._folderPct);
-    gs.balance     = Math.round(gs.balance + payout);
+    const payout = gs.round.calculatePayout(gs.bet, gs.selectedIdx, this._folderPct, { secondAccusation });
+    const net    = payout - gs.bet;
+    gs.balance   = Math.round(gs.balance + net);
     this._balanceText.setText(`$${gs.balance.toLocaleString()}`);
-    this._addClue(`✅ CORRECT! ${gs.round.suspects[gs.selectedIdx].name} is the killer!`, VI.HEX.GOLD);
-    this._addClue(`💰 PAYOUT: +$${Math.round(payout).toLocaleString()}`, VI.HEX.GOLD);
+    const tag = secondAccusation ? ' (Acc#2 — 40% cap)' : '';
+    this._addClue(`✅ CORRECT! ${gs.round.suspects[gs.selectedIdx].name} is the killer!${tag}`, VI.HEX.GOLD);
+    this._addClue(`💰 PAYOUT: +$${Math.round(net).toLocaleString()}`, VI.HEX.GOLD);
     this._markGuiltySuspect(gs.selectedIdx);
-    this._showResultOverlay(true, payout);
-    this.events.emit('game:win', { payout, balance: gs.balance });
+    this._showResultOverlay(true, net);
+    this.events.emit('game:win', { payout: net, balance: gs.balance });
+    this._setPhase(VI.PHASES.SCOREBOARD);
   }
 
   _resolveLoss() {
     const gs = this.gs;
-    gs.state = 'finished';
-    const lost    = gs.bet;
+    // INSURANCE: 50% refund of the (uplifted) bet on a wrong call
+    const refund  = gs.round.getInsuranceRefund(gs.bet);
+    const lost    = gs.bet - refund;
     gs.balance    = Math.max(0, Math.round(gs.balance - lost));
     this._balanceText.setText(`$${gs.balance.toLocaleString()}`);
     this._addClue(`❌ WRONG AGAIN! Killer was ${gs.round.suspects[gs.round.killerIdx].name}.`, VI.HEX.VI_RED);
-    this._addClue(`💸 LOST: -$${lost.toLocaleString()}`, VI.HEX.MAGENTA);
+    if (refund > 0) {
+      this._addClue(`🛡 INSURANCE refund: +$${refund.toLocaleString()}`, VI.HEX.CYAN);
+    }
+    this._addClue(`💸 NET LOST: -$${lost.toLocaleString()}`, VI.HEX.MAGENTA);
     this._markGuiltySuspect(gs.round.killerIdx);
     this._showResultOverlay(false, -lost);
     this.events.emit('game:loss', { lost, balance: gs.balance });
+    this._setPhase(VI.PHASES.SCOREBOARD);
   }
 
   _markGuiltySuspect(idx) {
@@ -544,26 +687,50 @@ class GameScene extends Phaser.Scene {
     else      { this.cameras.main.shake(300, 0.012); }
   }
 
-  // ── Action cards ───────────────────────────────────────────
-
+  // ── Action cards (GDD v0.4 canonical 8) ────────────────────
+  // RoundController is math authority; this is scene-side dispatcher.
   _onActionCard(id) {
-    if (this.gs.state !== 'playing') return;
-    const result = this.gs.round.applyAction ? this.gs.round.applyAction(id) : null;
-    const msgs = {
-      'EXTRA_CLUE':   (r) => `🃏 EXTRA CLUE: ${r ? r.text : 'no new clue available'}`,
-      'ELIMINATE':    (r) => `🃏 ELIMINATE: ${r && r.eliminated ? r.eliminated + ' ruled out' : 'no one eliminated'}`,
-      'PRESS_LUCK':   (r) => `🃏 PRESS YOUR LUCK: ${r && r.text ? r.text : 'nothing revealed'}`,
-      'LOCK_IN':      ()  => { this.gs.round._lockedFolder = this._folderPct; this._freezeFolder(10000); return '🃏 LOCK IN: multiplier locked + folder frozen 10s'; },
-      'CHAOS_ROLL':   (r) => `🃏 CHAOS ROLL: ${r && r.text ? r.text : 'chaos ensues'}`,
-      'DOUBLE_DOWN':  ()  => { this.gs.bet = this.gs.bet * 2; this.events.emit('game:bet_updated', this.gs.bet); return `🃏 DOUBLE DOWN: bet → $${this.gs.bet}`; },
-      'SWAP':         ()  => '🃏 SWAP: suspect profile refreshed',
-      'INSURANCE':    ()  => '🃏 INSURANCE: 50% refund on wrong accusation',
-    };
-    const msgFn = msgs[id];
-    const msg   = msgFn ? msgFn(result) : `🃏 ${id}`;
-    if (msg) this._addClue(msg, VI.HEX.VI_BLUE);
-    if (result && result.idx != null) this._dimSuspect(result.idx);
+    if (this.gs.phase !== VI.PHASES.BETTING) {
+      this.events.emit('game:error', 'Actions only available during betting');
+      return;
+    }
+    const r = this.gs.round.applyAction(id);
+    if (!r) {
+      this.events.emit('game:error', 'Action already used this round');
+      return;
+    }
+    if (r.multBet)  { this.gs.bet = Math.round(this.gs.bet * r.multBet); this.events.emit('game:bet_updated', this.gs.bet); }
+    if (r.betDelta) { this.gs.bet = Math.max(0, this.gs.bet + r.betDelta); this.events.emit('game:bet_updated', this.gs.bet); }
+    if (r.cycleSuspect && this.gs.selectedIdx >= 0) {
+      const n = this.gs.round.suspects.length;
+      this.gs.selectedIdx = (this.gs.selectedIdx + r.cycleSuspect + n) % n;
+      this._refreshSuspectHighlights();
+    }
+    if (r.lockSuspect)    this._suspectLockedByAction = true;
+    if (r.lockFolder)     this.gs.round.lockFolderAt(this._folderPct);
+    if (r.burnMultiplier) this._burnMultiplier = r.burnMultiplier;
+    if (r.cashOut) { this._cashOutResolve(); return; }
+    const actionMeta = MURDER_DATA.actions.find(a => a.id === id) || { short: id, icon: '🃏' };
+    this._addClue(`${actionMeta.icon} ${actionMeta.short}: ${r.text}`, VI.HEX.VI_BLUE);
     this.events.emit('game:action_used', id);
+  }
+
+  _cashOutResolve() {
+    const gs = this.gs;
+    if (gs.bet <= 0 || gs.selectedIdx < 0) {
+      this._addClue('💸 CASH OUT requires a bet + suspect. Try again.', VI.HEX.MAGENTA);
+      gs.round._actionUsed['CASH_OUT'] = false;
+      gs.round._cashedOut = false;
+      return;
+    }
+    this._stopTimer();
+    const payout = gs.round.calculateCashOut(gs.bet, this._folderPct);
+    gs.balance   = Math.round(gs.balance + payout - gs.bet);
+    this._balanceText.setText(`$${gs.balance.toLocaleString()}`);
+    this._addClue(`💸 CASH OUT: collected $${payout.toLocaleString()}.`, VI.HEX.GOLD);
+    this._showResultOverlay(true, payout - gs.bet);
+    this.events.emit('game:win', { payout: payout - gs.bet, balance: gs.balance });
+    this._setPhase(VI.PHASES.SCOREBOARD);
   }
 
   _dimSuspect(idx) {
@@ -573,35 +740,18 @@ class GameScene extends Phaser.Scene {
     s.zone.disableInteractive();
   }
 
-  _freezeFolder(ms) {
-    this._stopTimer();
-    this.time.delayedCall(ms, () => {
-      if (this.gs.state === 'playing') {
-        this._burnTimer = this.time.addEvent({
-          delay: 250, loop: true,
-          callback: this._burnTick, callbackScope: this,
-        });
-      }
-    });
-  }
-
   // ── Background & decoration ────────────────────────────────
-
   _drawBackground() {
     const { width, height } = this.scale;
     const bg = this.add.graphics();
     bg.fillStyle(VI.COLORS.FLOOD_BLACK, 1);
     bg.fillRect(0, 0, width, height);
-
-    // Splash blobs
     bg.fillStyle(VI.COLORS.CYAN, 0.03);
     bg.fillEllipse(width * 0.75, height * 0.3, 620, 420);
     bg.fillStyle(VI.COLORS.MAGENTA, 0.025);
     bg.fillEllipse(width * 0.2, height * 0.75, 500, 360);
     bg.fillStyle(VI.COLORS.VI_PURPLE, 0.04);
     bg.fillEllipse(width * 0.5, height * 0.55, 720, 520);
-
-    // Dot matrix (Linear GFX)
     const dot = this.add.graphics();
     dot.fillStyle(VI.COLORS.CYAN, VI.GAME.DOT_OPACITY);
     for (let x = 0; x < width; x += VI.GAME.DOT_SPACING) {
@@ -609,8 +759,6 @@ class GameScene extends Phaser.Scene {
         dot.fillCircle(x, y, VI.GAME.DOT_RADIUS);
       }
     }
-
-    // Accent arc
     const arc = this.add.graphics();
     arc.lineStyle(3, VI.COLORS.VI_AMBER, 0.12);
     arc.beginPath();

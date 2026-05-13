@@ -53,12 +53,12 @@ class PreloadScene extends Phaser.Scene {
 
     // Background panel
     const panel = this.add.graphics();
-    panel.fillStyle(VI.COLORS.BG_SURFACE, 1);
+    panel.fillStyle(VI.COLORS.PANEL_SURFACE, 1);
     panel.fillRoundedRect(cx - 260, cy - 60, 520, 120, 12);
 
     // Bar track
     const track = this.add.graphics();
-    track.fillStyle(VI.COLORS.PURPLE_DARK, 1);
+    track.fillStyle(VI.COLORS.VI_PURPLE, 0.4);
     track.fillRoundedRect(cx - 220, cy - 12, 440, 24, 12);
 
     // Bar fill (animated)

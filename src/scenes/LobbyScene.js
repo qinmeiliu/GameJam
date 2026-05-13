@@ -19,25 +19,19 @@ class LobbyScene extends Phaser.Scene {
     this._seats        = [];                                 // sprite/text refs per seat
     this._plateRefs    = {};                                 // refs into center plaque
 
-    // GDD-flavored suspect silhouette colours, rotated through seats
-    this._seatColors = [
-      VI.COLORS.CYAN,       // GUEST 1 (mandatory)
-      VI.COLORS.MAGENTA,    // GUEST 2 (mandatory)
-      VI.COLORS.VI_AMBER,   // GUEST 3 (mandatory)
-      VI.COLORS.GOLD,       // GUEST 4 (optional)
-      VI.COLORS.VI_PURPLE,  // GUEST 5 (optional)
-      VI.COLORS.VI_BLUE,    // GUEST 6 (optional)
-    ];
+    // Pick 6 random characters from the full 8-character roster.
+    // Each seat keeps its character for the whole scene visit; re-entering
+    // the Lobby re-shuffles. The 2 characters left out will sit this round out.
+    const pool = [...MURDER_DATA.victims];
+    this._shuffleArr(pool);
+    this._seatChars = pool.slice(0, this._maxSeats);
+  }
 
-    // Funny names that rotate through occupied seats — purely cosmetic flavour
-    this._seatNames = [
-      'THE BUTLER',
-      'THE CHEF',
-      'THE MAYOR',
-      'THE DUCHESS',
-      'THE MIME',
-      'COUNT RUBBERDUCK',
-    ];
+  _shuffleArr(arr) {
+    for (let i = arr.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [arr[i], arr[j]] = [arr[j], arr[i]];
+    }
   }
 
   create() {
@@ -45,11 +39,9 @@ class LobbyScene extends Phaser.Scene {
 
     this._drawBackground();
     this._buildTopBar();
-    this._buildHeader();
     this._buildRoundTable();
     this._buildSeats();
     this._buildCenterPlate();
-    this._buildDuckyAside();
     this._buildStartButton();
 
     this._refreshAll();
@@ -77,24 +69,6 @@ class LobbyScene extends Phaser.Scene {
     this.add.text(width - 28, 32, `$${this._balance.toLocaleString()}`, {
       fontFamily: VI.FONTS.MONO, fontSize: '22px', color: VI.HEX.GOLD,
     }).setOrigin(1, 0);
-  }
-
-  // ── Header copy (no big title — that lived on Menu) ─────────
-
-  _buildHeader() {
-    const { width } = this.scale;
-    const cx = width / 2;
-
-    this.add.text(cx, 56, "TONIGHT'S DINNER PARTY", {
-      fontFamily: VI.FONTS.HEADING, fontSize: '24px',
-      color: VI.HEX.GOLD, letterSpacing: 8,
-      shadow: { blur: 14, color: VI.HEX.GOLD, fill: true },
-    }).setOrigin(0.5);
-
-    this.add.text(cx, 86, 'PULL UP A CHAIR.  THE MORE GUESTS, THE BIGGER THE POT.', {
-      fontFamily: VI.FONTS.BODY, fontSize: '12px',
-      color: VI.HEX.CYAN, alpha: 0.7, letterSpacing: 4,
-    }).setOrigin(0.5);
   }
 
   // ── The round table itself ──────────────────────────────────
@@ -154,8 +128,9 @@ class LobbyScene extends Phaser.Scene {
   _buildSingleSeat(idx) {
     const { cx, cy } = this._seatPosition(idx);
     const hexR  = 46;
-    const color = this._seatColors[idx];
-    const name  = this._seatNames[idx];
+    const char  = this._seatChars[idx];          // { id, name, trait, color } from MURDER_DATA.victims
+    const color = char.color;
+    const name  = char.name.toUpperCase();
 
     // Hex holding device — separate graphics per state for clean refresh
     const hex      = this.add.graphics();
@@ -197,7 +172,7 @@ class LobbyScene extends Phaser.Scene {
       });
     });
 
-    return { idx, cx, cy, hexR, color, name, hex, silG, plus, label, sublabel, zone };
+    return { idx, cx, cy, hexR, color, name, char, hex, silG, plus, label, sublabel, zone };
   }
 
   _isOptional(idx) {
@@ -235,8 +210,8 @@ class LobbyScene extends Phaser.Scene {
       s.hex.lineStyle(hover ? 3 : 2, borderColor, hover ? 1 : 0.85);
       s.hex.strokePoints(pts, true);
 
-      // Suspect silhouette inside hex — simple geometric shape (rectangle body + circle head)
-      this._drawSilhouette(s.silG, s.cx, s.cy, s.color, idx);
+      // Character-specific silhouette per GDD spec (butler bowtie, chef hat, etc.)
+      this._drawSilhouette(s.silG, s.cx, s.cy, s.char);
 
       s.plus.setAlpha(0);
 
@@ -269,24 +244,106 @@ class LobbyScene extends Phaser.Scene {
     }
   }
 
-  _drawSilhouette(g, cx, cy, color, idx) {
-    // Tiny geometric silhouette — rectangle body, circle head.
-    // Slight per-seat variation to keep them distinct.
-    const variants = [
-      // 0: classic head + body
-      () => { g.fillStyle(color, 0.9); g.fillCircle(cx, cy - 12, 8); g.fillRect(cx - 10, cy - 4, 20, 22); },
-      // 1: top-hat figure
-      () => { g.fillStyle(color, 0.9); g.fillRect(cx - 8, cy - 22, 16, 6); g.fillCircle(cx, cy - 12, 8); g.fillRect(cx - 10, cy - 4, 20, 22); },
-      // 2: chef-hat figure
-      () => { g.fillStyle(color, 0.9); g.fillRect(cx - 6, cy - 24, 12, 10); g.fillCircle(cx, cy - 12, 8); g.fillRect(cx - 10, cy - 4, 20, 22); },
-      // 3: hourglass duchess
-      () => { g.fillStyle(color, 0.9); g.fillCircle(cx, cy - 12, 7); g.fillTriangle(cx - 12, cy + 18, cx + 12, cy + 18, cx, cy - 4); },
-      // 4: slim mime
-      () => { g.fillStyle(color, 0.9); g.fillCircle(cx, cy - 12, 7); g.fillRect(cx - 6, cy - 4, 12, 22); },
-      // 5: cape figure
-      () => { g.fillStyle(color, 0.9); g.fillTriangle(cx - 16, cy + 18, cx + 16, cy + 18, cx, cy - 8); g.fillCircle(cx, cy - 12, 8); g.fillRect(cx - 8, cy - 4, 16, 22); },
-    ];
-    (variants[idx] || variants[0])();
+  _drawSilhouette(g, cx, cy, char) {
+    // GDD-spec geometric silhouettes — one variant per character id.
+    // Each silhouette stays inside an imaginary 36×40 bounding box centered
+    // on (cx, cy) so they all fit cleanly inside the seat hex.
+    const c = char.color;
+    g.fillStyle(c, 0.9);
+
+    switch (char.id) {
+      case 'butler': {
+        // Tall rectangle body, small circle head, bowtie triangle
+        g.fillCircle(cx, cy - 13, 6);
+        g.fillRect(cx - 8, cy - 5, 16, 22);
+        // Bowtie
+        g.fillTriangle(cx - 8, cy - 4, cx, cy + 1, cx - 8, cy + 4);
+        g.fillTriangle(cx + 8, cy - 4, cx, cy + 1, cx + 8, cy + 4);
+        break;
+      }
+      case 'chef': {
+        // Stocky rectangle, tall chef hat cylinder above
+        g.fillEllipse(cx, cy - 22, 14, 8);            // hat top
+        g.fillRect(cx - 6, cy - 22, 12, 10);          // hat band
+        g.fillCircle(cx, cy - 10, 7);
+        g.fillRect(cx - 12, cy - 3, 24, 20);          // stocky body
+        break;
+      }
+      case 'mayor': {
+        // Wide rectangle, top hat, tiny circle head
+        g.fillRect(cx - 9, cy - 24, 18, 4);           // hat brim
+        g.fillRect(cx - 6, cy - 32, 12, 10);          // hat crown
+        g.fillCircle(cx, cy - 14, 5);                 // tiny head
+        g.fillRect(cx - 13, cy - 7, 26, 22);          // wide body
+        break;
+      }
+      case 'janitor': {
+        // Medium rectangle, mop handle diagonal line
+        g.fillCircle(cx, cy - 12, 6);
+        g.fillRect(cx - 8, cy - 5, 16, 22);
+        // Mop handle (diagonal)
+        g.lineStyle(2, c, 1);
+        g.lineBetween(cx + 4, cy - 4, cx + 18, cy - 22);
+        g.fillStyle(c, 0.7);
+        g.fillCircle(cx + 18, cy - 22, 4);            // mop head
+        g.fillStyle(c, 0.9);
+        break;
+      }
+      case 'count': {
+        // Cape triangle sweeping behind rectangle body
+        g.fillTriangle(cx - 18, cy + 18, cx + 18, cy + 18, cx, cy - 10);    // cape
+        g.fillStyle(0x000000, 0.35);
+        g.fillCircle(cx, cy - 13, 7);                 // shadow
+        g.fillStyle(c, 0.95);
+        g.fillCircle(cx, cy - 13, 6);                 // head
+        g.fillRect(cx - 7, cy - 5, 14, 22);           // body
+        break;
+      }
+      case 'mime': {
+        // Slim rectangle, beret circle, vertical stripe accents
+        g.fillCircle(cx - 2, cy - 18, 7);             // beret (offset)
+        g.fillCircle(cx, cy - 12, 6);                 // head
+        g.fillRect(cx - 5, cy - 5, 10, 22);           // slim body
+        // Stripes
+        g.fillStyle(0x000000, 0.4);
+        g.fillRect(cx - 5, cy + 2,  10, 2);
+        g.fillRect(cx - 5, cy + 8,  10, 2);
+        g.fillStyle(c, 0.9);
+        break;
+      }
+      case 'duchess': {
+        // Hourglass silhouette, tall hair up, fan shape hand
+        g.fillTriangle(cx - 4, cy - 22, cx + 4, cy - 22, cx, cy - 30);   // tall hair point
+        g.fillRect(cx - 5, cy - 22, 10, 6);                              // hair base
+        g.fillCircle(cx, cy - 14, 6);                                    // head
+        // Hourglass body (triangle down + triangle up)
+        g.fillTriangle(cx - 10, cy - 5, cx + 10, cy - 5, cx, cy + 5);
+        g.fillTriangle(cx - 11, cy + 18, cx + 11, cy + 18, cx, cy + 5);
+        // Fan hand
+        g.fillTriangle(cx + 11, cy + 2, cx + 18, cy - 2, cx + 16, cy + 6);
+        break;
+      }
+      case 'librarian': {
+        // Rectangle with stack of small rectangles (books) balanced on arm
+        g.fillCircle(cx, cy - 13, 6);
+        g.fillRect(cx - 8, cy - 5, 16, 22);
+        // Book stack on right arm
+        g.fillRect(cx + 8, cy - 4, 10, 4);
+        g.fillRect(cx + 8, cy + 1, 10, 4);
+        g.fillRect(cx + 8, cy + 6, 10, 4);
+        // Glasses hint
+        g.fillStyle(0x000000, 0.5);
+        g.fillCircle(cx - 2, cy - 13, 2);
+        g.fillCircle(cx + 2, cy - 13, 2);
+        g.fillStyle(c, 0.9);
+        break;
+      }
+      default: {
+        // Fallback (shouldn't happen if MURDER_DATA stays in sync)
+        g.fillCircle(cx, cy - 12, 8);
+        g.fillRect(cx - 10, cy - 4, 20, 22);
+      }
+    }
   }
 
   // ── Center plaque — live payout preview ─────────────────────
@@ -354,50 +411,6 @@ class LobbyScene extends Phaser.Scene {
   _refreshAll() {
     for (let i = 0; i < this._maxSeats; i++) this._drawSeat(i, false);
     this._refreshPlate();
-  }
-
-  // ── Ducky aside (funny commentary, bottom-left) ─────────────
-
-  _buildDuckyAside() {
-    const x = 110, y = this.scale.height - 110;
-
-    // Tiny Ducky head
-    const g = this.add.graphics();
-    g.fillStyle(VI.COLORS.GOLD, 0.95);
-    g.fillEllipse(x, y, 56, 40);                  // body
-    g.fillEllipse(x + 14, y - 18, 30, 26);        // head
-    g.fillStyle(VI.COLORS.VI_ORANGE, 1);
-    g.fillTriangle(x + 26, y - 18, x + 44, y - 12, x + 26, y - 8);  // beak
-    g.fillStyle(VI.COLORS.FLOOD_BLACK, 1);
-    g.fillCircle(x + 19, y - 22, 3);              // eye
-    g.fillStyle(VI.COLORS.PANEL_SURFACE, 1);      // hat
-    g.fillRect(x + 4, y - 36, 22, 4);
-    g.fillRect(x + 9, y - 50, 14, 14);
-    g.lineStyle(1.5, VI.COLORS.GOLD, 0.9);
-    g.strokeRect(x + 4, y - 36, 22, 4);
-    g.strokeRect(x + 9, y - 50, 14, 14);
-
-    // Speech bubble
-    const bx = x + 80, by = y - 30;
-    const bw = 360, bh = 64;
-    const bg = this.add.graphics();
-    bg.fillStyle(VI.COLORS.PANEL_SURFACE, 0.95);
-    bg.fillRoundedRect(bx, by - bh / 2, bw, bh, 10);
-    bg.lineStyle(1, VI.COLORS.CYAN, 0.5);
-    bg.strokeRoundedRect(bx, by - bh / 2, bw, bh, 10);
-    // Tail
-    bg.fillStyle(VI.COLORS.PANEL_SURFACE, 0.95);
-    bg.fillTriangle(bx, by - 6, bx, by + 6, bx - 10, by + 2);
-
-    this.add.text(bx + 12, by - bh / 2 + 8, '🦆  DUCKY SAYS:', {
-      fontFamily: VI.FONTS.HEADING, fontSize: '10px',
-      color: VI.HEX.CYAN, letterSpacing: 4,
-    });
-    this.add.text(bx + 12, by - bh / 2 + 26, '"Three\'s a murder. Six is a dinner party that went WILDLY wrong."', {
-      fontFamily: VI.FONTS.BODY, fontSize: '12px',
-      color: VI.HEX.CREAM, alpha: 0.85,
-      fontStyle: 'italic', wordWrap: { width: bw - 24 },
-    });
   }
 
   // ── BEGIN INVESTIGATION button ──────────────────────────────

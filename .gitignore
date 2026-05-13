@@ -1,0 +1,22 @@
+# Dependencies (if you add a local dev server later)
+node_modules/
+.npm
+
+# OS files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Editor
+.vscode/
+.idea/
+*.suo
+*.user
+
+# Build output (if you ever add a bundler)
+dist/
+build/
+
+# Env / secrets
+.env
+.env.local

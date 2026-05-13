@@ -27,4 +27,4 @@ const config = {
 };
 
 // Boot the game
-const game = new Phaser.Game(config);
+const game = new Phase

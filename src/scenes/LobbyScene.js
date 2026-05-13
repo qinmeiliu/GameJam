@@ -188,7 +188,13 @@ class LobbyScene extends Phaser.Scene {
       const optIdx = idx - this._mandatory;
       this._optionalOn[optIdx] = !this._optionalOn[optIdx];
       this._refreshAll();
-      this.cameras.main.flash(80, 253, 224, 84, false);
+      // Localized seat pulse instead of a full-screen camera flash.
+      // Tweening the silhouette layer keeps the feedback right at the click.
+      this.tweens.add({
+        targets: this._seats[idx].silG,
+        alpha: { from: 0.2, to: 1 },
+        duration: 220, ease: 'Cubic.easeOut',
+      });
     });
 
     return { idx, cx, cy, hexR, color, name, hex, silG, plus, label, sublabel, zone };

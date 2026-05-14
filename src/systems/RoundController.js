@@ -64,16 +64,31 @@ class RoundController {
     const shuffled   = this._shuffle([...d.victims]).slice(0, this.suspectCount);
     this.killerIdx   = Math.floor(Math.random() * shuffled.length);
 
+    // Pick a unique alibi quote for each suspect — no two suspects should
+    // say the same thing in the same round. Track used quote *functions*
+    // across all types so cross-type collisions also can't repeat.
+    const usedQuotes = new Set();
+    const pickUniqueQuote = (type) => {
+      const pool = this._shuffle([...d.quoteTemplates[type]]);
+      let fn = pool.find(q => !usedQuotes.has(q));
+      if (!fn) {
+        // Pool exhausted (more suspects of this type than quotes) — accept
+        // a repeat from a different type rather than from the same pool.
+        fn = pool[0];
+      }
+      usedQuotes.add(fn);
+      return fn(weaponName, motive);
+    };
+
     this.suspects = shuffled.map((s, i) => {
       const isKiller  = (i === this.killerIdx);
       const quoteType = isKiller ? 'guilty' : (Math.random() < 0.5 ? 'sus' : 'clueless');
-      const pool      = d.quoteTemplates[quoteType];
-      const quoteFn   = pool[Math.floor(Math.random() * pool.length)];
       return {
+        id:      s.id,
         name:    s.name,
         color:   s.color,
         trait:   s.trait,
-        alibi:   quoteFn(weaponName, motive),
+        alibi:   pickUniqueQuote(quoteType),
         quoteType,
         trustScore: 35 + Math.floor(Math.random() * 40),
       };

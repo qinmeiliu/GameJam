@@ -41,7 +41,21 @@ class PreloadScene extends Phaser.Scene {
   }
 
   create() {
-    this.scene.start('MenuScene');
+    // Make sure Oswald is fully loaded before we hand off to MenuScene.
+    // Otherwise the first-frame paint uses a fallback font and the on-hover
+    // redraw flips to Oswald, making text "change" mid-screen. We force-load
+    // both weights we use and wait for the promises before transitioning.
+    const advance = () => this.scene.start('MenuScene');
+    if (document.fonts && typeof document.fonts.load === 'function') {
+      Promise.all([
+        document.fonts.load('700 1em Oswald'),
+        document.fonts.load('300 1em Oswald'),
+      ]).then(advance).catch(advance);   // Fail-open: still start the menu
+    } else {
+      // Older browser without the CSS Font Loading API — small delay buffer
+      // so a slow font request can finish before we render the first scene.
+      this.time.delayedCall(200, advance);
+    }
   }
 
   // ── Private helpers ─────────────────────────────────────────

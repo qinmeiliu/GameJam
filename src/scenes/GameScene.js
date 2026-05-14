@@ -95,6 +95,13 @@ class GameScene extends Phaser.Scene {
     this._burnMultiplier = 1;
     this._suspectLockedByAction = false;
 
+    // Destroy every overlay/badge created during the previous round, so
+    // the scoreboard, killer marker, etc. don't bleed into the new case.
+    if (this._roundOverlayObjs) {
+      this._roundOverlayObjs.forEach(o => { if (o && o.destroy) o.destroy(); });
+    }
+    this._roundOverlayObjs = [];
+
     this._refreshCasePanel();
     this._refreshSuspects();
     this._refreshFolderBar();
@@ -246,7 +253,7 @@ class GameScene extends Phaser.Scene {
     const wrongSpr = this._suspectSprites[wrongIdx];
     if (wrongSpr) {
       this.tweens.add({
-        targets: [wrongSpr.g, wrongSpr.nameText, wrongSpr.numText],
+        targets: [wrongSpr.g, wrongSpr.nameText, wrongSpr.silG],
         alpha: 0.15, duration: 400,
       });
       // Hide their quote bubble for good
@@ -458,7 +465,7 @@ class GameScene extends Phaser.Scene {
     if (!r) return;
 
     this._suspectSprites.forEach(s => {
-      [s.g, s.nameText, s.highlightG, s.zone, s.numText, s.bubbleG, s.bubbleText]
+      [s.g, s.nameText, s.highlightG, s.zone, s.silG, s.bubbleG, s.bubbleText]
         .forEach(o => { if (o) o.destroy(); });
     });
     this._suspectSprites = [];
@@ -481,12 +488,14 @@ class GameScene extends Phaser.Scene {
       const g          = this.add.graphics();
       this._drawSuspectToken(g, cx, cy, tokenR, sus.color);
 
-      const numText = this.add.text(cx, cy - 8, `${idx + 1}`, {
-        fontFamily: VI.FONTS.HEADING,
-        fontSize: `${Math.round(tokenR * 0.55)}px`,
-        color: Phaser.Display.Color.IntegerToColor(sus.color).rgba,
-        stroke: '#000000', strokeThickness: 3,
-      }).setOrigin(0.5);
+      // Character silhouette inside the hex (replaces the bare number).
+      // Drawn at origin so we can position + scale the graphics cleanly.
+      const silG = this.add.graphics();
+      this._drawSuspectSilhouette(silG, sus);
+      silG.setPosition(cx, cy);
+      // Reference scale matches the Lobby seat hex (r≈46). Scale up/down
+      // for the game-scene tokenR so silhouettes always fill their hex.
+      silG.setScale(tokenR / 46);
 
       const nameText = this.add.text(cx, cy + tokenR + 14, sus.name.toUpperCase(), {
         fontFamily: VI.FONTS.HEADING, fontSize: '13px',
@@ -563,10 +572,10 @@ class GameScene extends Phaser.Scene {
       });
 
       // Suspects start hidden — they reveal when ACCUSE phase begins.
-      [g, numText, nameText].forEach(o => o.setAlpha(0));
+      [g, silG, nameText].forEach(o => o.setAlpha(0));
 
       this._suspectSprites.push({
-        g, numText, nameText, highlightG, zone,
+        g, silG, nameText, highlightG, zone,
         bubbleG, bubbleText,
         cx, cy, tokenR, idx, sus,
       });
@@ -577,11 +586,91 @@ class GameScene extends Phaser.Scene {
   _revealSuspects() {
     this._suspectSprites.forEach((s, i) => {
       this.tweens.add({
-        targets: [s.g, s.numText, s.nameText],
+        targets: [s.g, s.silG, s.nameText],
         alpha: 1,
         duration: 400, delay: i * 70, ease: 'Cubic.easeOut',
       });
     });
+  }
+
+  // GDD-spec character silhouettes — drawn at origin so the caller can
+  // setPosition(cx, cy) + setScale() to fit whatever hex size we end up
+  // with for a given suspect count. Same visual language as the Lobby.
+  _drawSuspectSilhouette(g, char) {
+    const c = char.color;
+    g.fillStyle(c, 0.9);
+    switch (char.id) {
+      case 'butler': {
+        g.fillCircle(0, -13, 6);
+        g.fillRect(-8, -5, 16, 22);
+        g.fillTriangle(-8, -4, 0, 1, -8, 4);
+        g.fillTriangle( 8, -4, 0, 1,  8, 4);
+        break;
+      }
+      case 'chef': {
+        g.fillEllipse(0, -22, 14, 8);
+        g.fillRect(-6, -22, 12, 10);
+        g.fillCircle(0, -10, 7);
+        g.fillRect(-12, -3, 24, 20);
+        break;
+      }
+      case 'mayor': {
+        g.fillRect(-9, -24, 18, 4);
+        g.fillRect(-6, -32, 12, 10);
+        g.fillCircle(0, -14, 5);
+        g.fillRect(-13, -7, 26, 22);
+        break;
+      }
+      case 'janitor': {
+        g.fillCircle(0, -12, 6);
+        g.fillRect(-8, -5, 16, 22);
+        g.lineStyle(2, c, 1);
+        g.lineBetween(4, -4, 18, -22);
+        g.fillStyle(c, 0.7); g.fillCircle(18, -22, 4); g.fillStyle(c, 0.9);
+        break;
+      }
+      case 'count': {
+        g.fillTriangle(-18, 18, 18, 18, 0, -10);
+        g.fillStyle(0x000000, 0.35); g.fillCircle(0, -13, 7);
+        g.fillStyle(c, 0.95);        g.fillCircle(0, -13, 6);
+        g.fillRect(-7, -5, 14, 22);
+        break;
+      }
+      case 'mime': {
+        g.fillCircle(-2, -18, 7);
+        g.fillCircle(0, -12, 6);
+        g.fillRect(-5, -5, 10, 22);
+        g.fillStyle(0x000000, 0.4);
+        g.fillRect(-5, 2, 10, 2);
+        g.fillRect(-5, 8, 10, 2);
+        g.fillStyle(c, 0.9);
+        break;
+      }
+      case 'duchess': {
+        g.fillTriangle(-4, -22, 4, -22, 0, -30);
+        g.fillRect(-5, -22, 10, 6);
+        g.fillCircle(0, -14, 6);
+        g.fillTriangle(-10, -5, 10, -5, 0, 5);
+        g.fillTriangle(-11, 18, 11, 18, 0, 5);
+        g.fillTriangle(11, 2, 18, -2, 16, 6);
+        break;
+      }
+      case 'librarian': {
+        g.fillCircle(0, -13, 6);
+        g.fillRect(-8, -5, 16, 22);
+        g.fillRect(8, -4, 10, 4);
+        g.fillRect(8,  1, 10, 4);
+        g.fillRect(8,  6, 10, 4);
+        g.fillStyle(0x000000, 0.5);
+        g.fillCircle(-2, -13, 2);
+        g.fillCircle( 2, -13, 2);
+        g.fillStyle(c, 0.9);
+        break;
+      }
+      default:
+        g.fillCircle(0, -12, 8);
+        g.fillRect(-10, -4, 20, 22);
+    }
   }
 
   _drawSuspectToken(g, cx, cy, r, color) {
@@ -899,11 +988,14 @@ class GameScene extends Phaser.Scene {
       shadow: { blur: 12, color: VI.HEX.MAGENTA, fill: true },
     }).setOrigin(0.5);
     this.tweens.add({ targets: badge, scaleX: 1.12, scaleY: 1.12, duration: 400, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
+    if (!this._roundOverlayObjs) this._roundOverlayObjs = [];
+    this._roundOverlayObjs.push(badge);
   }
 
   _showResultOverlay(win, delta) {
     const { width, height } = this.scale;
     const cx = width / 2, cy = height / 2;
+    const pw = 560, ph = 360;
 
     const overlay = this.add.graphics();
     overlay.fillStyle(0x000000, 0.72);
@@ -911,12 +1003,12 @@ class GameScene extends Phaser.Scene {
 
     const panel = this.add.graphics();
     panel.fillStyle(VI.COLORS.PANEL_SURFACE, 0.97);
-    panel.fillRoundedRect(cx - 270, cy - 150, 540, 300, 16);
+    panel.fillRoundedRect(cx - pw/2, cy - ph/2, pw, ph, 16);
     panel.lineStyle(3, win ? VI.COLORS.GOLD : VI.COLORS.VI_RED, 1);
-    panel.strokeRoundedRect(cx - 270, cy - 150, 540, 300, 16);
+    panel.strokeRoundedRect(cx - pw/2, cy - ph/2, pw, ph, 16);
 
-    const headline = this.add.text(cx, cy - 100, win ? '🔍  CASE SOLVED!' : '❌  CASE COLD', {
-      fontFamily: VI.FONTS.HEADING, fontSize: '38px',
+    const headline = this.add.text(cx, cy - 130, win ? '🔍  CASE SOLVED!' : '❌  CASE COLD', {
+      fontFamily: VI.FONTS.HEADING, fontSize: '36px',
       color: win ? VI.HEX.GOLD : VI.HEX.VI_RED, stroke: '#000', strokeThickness: 5,
       shadow: { blur: 18, color: win ? VI.HEX.GOLD : VI.HEX.VI_RED, fill: true },
     }).setOrigin(0.5);
@@ -925,17 +1017,33 @@ class GameScene extends Phaser.Scene {
     const verdictLine = win
       ? `${killerName} has been arrested!`
       : `The killer was ${killerName}. They escape free.`;
-    this.add.text(cx, cy - 52, verdictLine, {
+    const verdictText = this.add.text(cx, cy - 84, verdictLine, {
       fontFamily: VI.FONTS.BODY, fontSize: '15px', color: VI.HEX.CREAM,
     }).setOrigin(0.5);
 
+    // ── Multiplier breakdown (win only) ──────────────────────
+    let multText = null, multSubText = null;
+    if (win && this.gs.bet > 0) {
+      const gross = delta + this.gs.bet;             // delta is net profit; gross = profit + stake
+      const mult  = gross / this.gs.bet;
+      const tag   = this.gs.wrongCount === 1 ? '  (Acc#2 × 0.40)' : '';
+      multText = this.add.text(cx, cy - 48, `MULTIPLIER  ×${mult.toFixed(2)}`, {
+        fontFamily: VI.FONTS.HEADING, fontSize: '18px', color: VI.HEX.CYAN, letterSpacing: 5,
+      }).setOrigin(0.5);
+      multSubText = this.add.text(cx, cy - 24, `bet $${this.gs.bet}  →  $${gross.toLocaleString()}${tag}`, {
+        fontFamily: VI.FONTS.MONO, fontSize: '12px', color: VI.HEX.CREAM, alpha: 0.7,
+      }).setOrigin(0.5);
+    }
+
+    // Net delta — big and centered
     const amtColor = delta >= 0 ? VI.HEX.GOLD : VI.HEX.MAGENTA;
-    this.add.text(cx, cy, `${delta >= 0 ? '+' : ''}$${Math.round(delta).toLocaleString()}`, {
+    const deltaText = this.add.text(cx, cy + 20, `${delta >= 0 ? '+' : ''}$${Math.round(delta).toLocaleString()}`, {
       fontFamily: VI.FONTS.MONO, fontSize: '44px', color: amtColor,
+      shadow: { blur: 12, color: amtColor, fill: true },
     }).setOrigin(0.5);
 
-    this.add.text(cx, cy + 54, `Balance: $${this.gs.balance.toLocaleString()}`, {
-      fontFamily: VI.FONTS.MONO, fontSize: '18px', color: VI.HEX.CREAM,
+    const balanceText = this.add.text(cx, cy + 68, `Balance: $${this.gs.balance.toLocaleString()}`, {
+      fontFamily: VI.FONTS.MONO, fontSize: '16px', color: VI.HEX.CREAM,
     }).setOrigin(0.5);
 
     // Next case button
@@ -944,23 +1052,28 @@ class GameScene extends Phaser.Scene {
     const _drawBtn = (hover) => {
       btnG.clear();
       btnG.fillStyle(hover ? VI.COLORS.MAGENTA : VI.COLORS.VI_PURPLE, 1);
-      btnG.fillRoundedRect(cx - bw/2, cy + 90, bw, bh, 10);
+      btnG.fillRoundedRect(cx - bw/2, cy + ph/2 - 60, bw, bh, 10);
       btnG.lineStyle(2, VI.COLORS.GOLD, hover ? 1 : 0.7);
-      btnG.strokeRoundedRect(cx - bw/2, cy + 90, bw, bh, 10);
+      btnG.strokeRoundedRect(cx - bw/2, cy + ph/2 - 60, bw, bh, 10);
     };
     _drawBtn(false);
-    const btnLbl = this.add.text(cx, cy + 115, 'NEXT CASE  →', {
+    const btnLbl = this.add.text(cx, cy + ph/2 - 35, 'NEXT CASE  →', {
       fontFamily: VI.FONTS.HEADING, fontSize: '18px', color: '#fff',
     }).setOrigin(0.5);
 
-    const zone = this.add.zone(cx, cy + 115, bw, bh).setInteractive({ cursor: 'pointer' });
+    const zone = this.add.zone(cx, cy + ph/2 - 35, bw, bh).setInteractive({ cursor: 'pointer' });
     zone.on('pointerover',  () => { _drawBtn(true);  btnLbl.setColor(VI.HEX.GOLD); });
     zone.on('pointerout',   () => { _drawBtn(false); btnLbl.setColor('#fff'); });
     zone.on('pointerup', () => {
-      [overlay, panel, headline, btnG, btnLbl, zone].forEach(o => o && o.destroy && o.destroy());
       this.events.emit('game:next_round', this.gs.balance);
-      this._startRound();
+      this._startRound();          // cleans up everything via _roundOverlayObjs
     });
+
+    // Track everything for cleanup at _startRound
+    if (!this._roundOverlayObjs) this._roundOverlayObjs = [];
+    this._roundOverlayObjs.push(overlay, panel, headline, verdictText, deltaText, balanceText, btnG, btnLbl, zone);
+    if (multText)    this._roundOverlayObjs.push(multText);
+    if (multSubText) this._roundOverlayObjs.push(multSubText);
 
     // Cameras
     if (win) { this.cameras.main.flash(400, 253, 224, 84, false); }
@@ -1022,7 +1135,7 @@ class GameScene extends Phaser.Scene {
   _dimSuspect(idx) {
     const s = this._suspectSprites[idx];
     if (!s) return;
-    this.tweens.add({ targets: [s.g, s.nameText, s.numText], alpha: 0.22, duration: 300 });
+    this.tweens.add({ targets: [s.g, s.nameText, s.silG], alpha: 0.22, duration: 300 });
     s.zone.disableInteractive();
   }
 

@@ -957,7 +957,7 @@ class GameScene extends Phaser.Scene {
     bg.lineStyle(1, VI.COLORS.GOLD, 0.30);
     bg.strokeRoundedRect(fx, fy, fw, fh, 8);
 
-    this.add.text(fx + fw / 2, fy + 16, 'CLUE MARKET', {
+    const titleLbl = this.add.text(fx + fw / 2, fy + 16, 'CLUE MARKET', {
       fontFamily: VI.FONTS.HEADING, fontSize: '13px',
       color: VI.HEX.GOLD, letterSpacing: 6,
       shadow: { blur: 8, color: VI.HEX.GOLD, fill: true },
@@ -983,7 +983,10 @@ class GameScene extends Phaser.Scene {
       this._buildClueCard(0, fx + 10, fy + 68,  fw - 20, 88),
       this._buildClueCard(1, fx + 10, fy + 162, fw - 20, 88),
     ];
+    // Track every panel-chrome element so visibility toggles in lockstep
+    this._clueMarketChrome = [bg, titleLbl, this._noClueBonusLbl, sep];
     this._clueMarketFrozen = false;
+    this._marketVisible    = false;
     this._setClueMarketVisible(false);   // hidden until ACCUSE
   }
 
@@ -1066,6 +1069,13 @@ class GameScene extends Phaser.Scene {
     const card = this._clueCards && this._clueCards[idx];
     const r    = this.gs.round;
     if (!card || !r || !r.clues[idx]) return;
+
+    // If the market panel is currently hidden (BETTING, INTRO, SCOREBOARD),
+    // do not touch any element's visibility. Otherwise this method runs from
+    // _resetClueMarket / first ACCUSE entry and would resurrect the BUY
+    // buttons on the screen even while the panel is supposed to be hidden.
+    if (!this._marketVisible) return;
+
     const clue = r.clues[idx];
 
     if (clue.bought) {
@@ -1074,7 +1084,7 @@ class GameScene extends Phaser.Scene {
       card.btnLbl.setVisible(false);
       card.btnZone.setVisible(false);
       card.btnZone.disableInteractive();
-      card.clueText.setText(clue.text);
+      card.clueText.setText(clue.text).setVisible(true);
       return;
     }
     if (this._clueMarketFrozen) {
@@ -1083,7 +1093,7 @@ class GameScene extends Phaser.Scene {
       card.btnLbl.setVisible(false);
       card.btnZone.setVisible(false);
       card.btnZone.disableInteractive();
-      card.clueText.setText('');
+      card.clueText.setText('').setVisible(false);
       return;
     }
     // Available state — show cost
@@ -1093,7 +1103,7 @@ class GameScene extends Phaser.Scene {
     card.btnLbl.setText(`BUY  $${cost}`).setVisible(true);
     card.btnZone.setVisible(true);
     card.btnZone.setInteractive({ cursor: 'pointer' });
-    card.clueText.setText('');
+    card.clueText.setText('').setVisible(false);
   }
 
   _updateNoClueBonusIndicator() {
@@ -1108,25 +1118,37 @@ class GameScene extends Phaser.Scene {
   }
 
   _setClueMarketVisible(visible) {
-    if (!this._clueCards) return;
-    this._clueCards.forEach(c => {
-      [c.bg, c.headerLbl, c.btnG, c.btnLbl, c.btnZone, c.clueText].forEach(o => {
+    this._marketVisible = visible;
+    // Panel chrome (background, title, no-clue indicator, separator)
+    if (this._clueMarketChrome) {
+      this._clueMarketChrome.forEach(o => {
         if (o && typeof o.setVisible === 'function') o.setVisible(visible);
       });
-    });
-    if (this._noClueBonusLbl) this._noClueBonusLbl.setVisible(visible);
+    }
+    // Card display elements
+    if (this._clueCards) {
+      this._clueCards.forEach(c => {
+        [c.bg, c.headerLbl, c.btnG, c.btnLbl, c.btnZone, c.clueText].forEach(o => {
+          if (o && typeof o.setVisible === 'function') o.setVisible(visible);
+        });
+        if (!visible && c.btnZone && c.btnZone.disableInteractive) c.btnZone.disableInteractive();
+      });
+    }
+    // When transitioning to visible, sync card content with current state
+    if (visible) {
+      if (this._clueCards) this._clueCards.forEach((_, i) => this._refreshClueCard(i));
+      this._updateNoClueBonusIndicator();
+    }
   }
 
   _resetClueMarket() {
     this._clueMarketFrozen = false;
+    // Explicitly hide between rounds — _enter_ACCUSE will re-show it.
+    this._setClueMarketVisible(false);
     if (this._noClueBonusPulse) {
       this._noClueBonusPulse.resume && this._noClueBonusPulse.resume();
       this._noClueBonusPulse.restart && this._noClueBonusPulse.restart();
     }
-    if (this._clueCards) {
-      this._clueCards.forEach((_, i) => this._refreshClueCard(i));
-    }
-    this._updateNoClueBonusIndicator();
   }
 
   _freezeClueMarket() {

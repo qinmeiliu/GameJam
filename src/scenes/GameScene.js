@@ -16,7 +16,10 @@ class GameScene extends Phaser.Scene {
       balance:       (data && data.balance      != null) ? data.balance      : VI.GAME.DEFAULT_BALANCE,
       suspectCount:  (data && data.suspectCount != null) ? data.suspectCount : 4,
       round:         null,                 // RoundController instance
-      phase:         VI.PHASES.INTRO,      // canonical round phase
+      // Phase starts as null (not yet entered) so the first _setPhase(INTRO)
+      // actually fires _enter_INTRO. Otherwise the same-state guard in
+      // _setPhase would short-circuit and the round never advances.
+      phase:         null,
       state:         'playing',            // LEGACY: kept as alias so existing checks keep working
       selectedIdx:   -1,                   // which suspect the player has highlighted
       bet:           0,

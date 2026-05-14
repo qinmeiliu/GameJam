@@ -169,13 +169,27 @@ class GameScene extends Phaser.Scene {
   }
 
   // ── Phase: BETTING ─────────────────────────────────────────
-  // Open-ended: case file is shown, player reads + places a bet. No timer.
+  // Open-ended in spirit — player can read the case file at their own
+  // pace. We show a soft 60s countdown for pacing/feedback only; it
+  // doesn't force a transition.
   _enter_BETTING() {
     this._showCaseFile();
-    this._hideTimerText();        // no countdown during betting
+    this._showTimerText();
+    this._timerElapsed = 0;
+    this._timerExpired = false;
+    this._updateTimerText();
+
+    // Light tick that only updates the timer text — no folder burn here.
+    this._stopTimer();
+    this._burnTimer = this.time.addEvent({
+      delay: 250, loop: true,
+      callback: this._bettingTick, callbackScope: this,
+    });
+
     this._addClue('💼 Read the case file. Place your bet to deal the suspects.', VI.HEX.VI_AMBER);
   }
   _exit_BETTING() {
+    this._stopTimer();
     this._hideCaseFile();
   }
 
@@ -186,6 +200,10 @@ class GameScene extends Phaser.Scene {
   _enter_ACCUSE() {
     this._revealSuspects();
     this._showTimerText();
+    // Reset real-elapsed counter for the 30s accuse window
+    this._timerElapsed = 0;
+    this._timerExpired = false;
+    this._updateTimerText();
     this._addClue('🎲 The cards are dealt. Suspects revealed — call it!', VI.HEX.CYAN);
 
     // Folder burn timer — ticks every 250ms
@@ -239,7 +257,12 @@ class GameScene extends Phaser.Scene {
     gs.selectedIdx = -1;
     this._refreshSuspectHighlights();
 
-    // Resume burn ticker (wrongCount=1 makes it 3× per _burnTick)
+    // Fresh 15s countdown for second chance
+    this._timerElapsed = 0;
+    this._timerExpired = false;
+    this._updateTimerText();
+
+    // Resume burn ticker (wrongCount=1 makes the folder drop 3× per _burnTick)
     this._stopTimer();
     this._burnTimer = this.time.addEvent({
       delay: 250, loop: true,
@@ -284,23 +307,21 @@ class GameScene extends Phaser.Scene {
 
   _burnTick() {
     if (this.gs.state !== 'playing') return;
-    if (this.gs.round._lockedFolder !== null) {
-      // LOCK_IN active: folder integrity still drains visually but the
-      // multiplier used in payout math is frozen.
-    }
 
-    // Burn speed: base + wrong-accusation penalty (3×) + PRESS action (3×)
-    const wrongMult = this.gs.wrongCount > 0 ? 3 : 1;
+    // _timerElapsed = REAL seconds since phase entry. Always increments by 0.25.
+    // Folder integrity progresses at a multiplied rate (wrongCount and PRESS
+    // both speed it up), but the on-screen timer should still tick in real time.
+    const wrongMult  = this.gs.wrongCount > 0 ? 3 : 1;
     const actionMult = this._burnMultiplier || 1;
-    const speed     = wrongMult * actionMult;
+    const burnSpeed  = wrongMult * actionMult;
 
-    const totalSecs = VI.PHASE_TIMINGS.ACCUSE_TOTAL_MS / 1000;  // GDD: 30s for accuse
-    const tickSecs  = 0.25 * speed;
+    const totalSecs = VI.PHASE_TIMINGS.ACCUSE_TOTAL_MS / 1000;  // 30s real for ACCUSE
+    const tickSecs  = 0.25;
     const floor     = 0.20;
 
     this._timerElapsed += tickSecs;
-    const raw = 1.0 - (this._timerElapsed / totalSecs);
-    this._folderPct = Math.max(floor, raw);
+    const folderProgress = (this._timerElapsed * burnSpeed) / totalSecs;
+    this._folderPct = Math.max(floor, 1.0 - folderProgress);
 
     this._refreshFolderBar();
     this.events.emit('game:folder_update', this._folderPct);
@@ -309,6 +330,21 @@ class GameScene extends Phaser.Scene {
       this._timerExpired = true;
       this._addClue('⏰ TIME OUT — folder at minimum. Accuse now!', VI.HEX.VI_RED);
       this.events.emit('game:timeout');
+    }
+  }
+
+  // Lightweight tick for BETTING — increments _timerElapsed and updates the
+  // timer text. No folder burn (BETTING is open-ended visually). At soft
+  // expiry we nudge the player; no auto-advance.
+  _bettingTick() {
+    if (this.gs.phase !== VI.PHASES.BETTING) return;
+    this._timerElapsed += 0.25;
+    this._updateTimerText();
+
+    const totalSecs = VI.PHASE_TIMINGS.BETTING_TIMER_MS / 1000;
+    if (this._timerElapsed >= totalSecs && !this._timerExpired) {
+      this._timerExpired = true;
+      this._addClue('⏰ TIME UP — place your bet to deal the suspects!', VI.HEX.VI_RED);
     }
   }
 
@@ -361,7 +397,13 @@ class GameScene extends Phaser.Scene {
 
   _updateTimerText() {
     if (!this._timerText) return;
-    const total   = VI.PHASE_TIMINGS.ACCUSE_TOTAL_MS / 1000;
+    const P = VI.PHASES;
+    const T = VI.PHASE_TIMINGS;
+    let total = 0;
+    if      (this.gs.phase === P.BETTING)       total = T.BETTING_TIMER_MS  / 1000;
+    else if (this.gs.phase === P.ACCUSE)        total = T.ACCUSE_TOTAL_MS   / 1000;
+    else if (this.gs.phase === P.SECOND_CHANCE) total = T.SECOND_CHANCE_MS  / 1000;
+
     const elapsed = this._timerElapsed || 0;
     const secs    = Math.max(0, Math.round(total - elapsed));
     const col     = secs < 8 ? VI.HEX.VI_RED : secs < 15 ? VI.HEX.VI_ORANGE : VI.HEX.CREAM;
@@ -524,7 +566,9 @@ class GameScene extends Phaser.Scene {
   // toggle visibility on phase transitions.
 
   _buildCaseFilePanel() {
-    const cx = Math.round(this.scale.width * 0.40);   // left of the clue feed
+    // Position so the panel's right edge clears the clue feed (which starts at 0.64 × width).
+    // Panel center 0.32 × 1280 = 410; with pw=700 the right edge lands at 760, ~60px clear of the feed.
+    const cx = Math.round(this.scale.width * 0.32);
     const cy = 330;
     const pw = 700, ph = 380;
 
@@ -701,14 +745,28 @@ class GameScene extends Phaser.Scene {
     // Bets can only be placed in BETTING (before suspects appear).
     if (this.gs.phase !== VI.PHASES.BETTING) return;
     this.gs.bet = amt;
-    // Early Bird: bet locked before folder drops below 60% → +15% at payout.
-    // (Folder is at 100% during BETTING — Early Bird always applies here. We
-    // keep this hook live for compat with any future BETTING-phase folder burn.)
+
+    // Chips leave the bankroll the moment they hit the table — visceral
+    // feedback the player asked for. The resolution math (_resolveWin/Loss)
+    // accounts for this upfront deduction.
+    this.gs.balance = Math.max(0, this.gs.balance - amt);
+    this._balanceText.setText(`$${this.gs.balance.toLocaleString()}`);
+    // Make the balance flash magenta briefly so it's obvious it moved
+    this.tweens.add({
+      targets: this._balanceText,
+      alpha: { from: 0.4, to: 1 }, duration: 320, ease: 'Cubic.easeOut',
+    });
+
     if (this.gs.round && this.gs.round.registerBetLock) {
       this.gs.round.registerBetLock(this._folderPct);
     }
     const eb = (this._folderPct > 0.60) ? '  ★ EARLY BIRD +15%' : '';
-    this._addClue(`💰 Bet placed: $${amt}${eb}`, VI.HEX.VI_AMBER);
+    this._addClue(`💰 Bet placed: $${amt} (balance now $${this.gs.balance.toLocaleString()})${eb}`, VI.HEX.VI_AMBER);
+
+    // Tell UIScene so any balance-aware checks (e.g. chip affordability)
+    // see the updated number on the next interaction.
+    this.events.emit('game:balance_update', this.gs.balance);
+
     // Bet locked → "deal the cards" — transition to ACCUSE.
     this._setPhase(VI.PHASES.ACCUSE);
   }
@@ -738,10 +796,14 @@ class GameScene extends Phaser.Scene {
 
   _resolveWin(secondAccusation) {
     const gs = this.gs;
+    // Bet was deducted on confirm. On a win, credit the FULL gross payout
+    // (which includes the original stake plus winnings).
     const payout = gs.round.calculatePayout(gs.bet, gs.selectedIdx, this._folderPct, { secondAccusation });
-    const net    = payout - gs.bet;
-    gs.balance   = Math.round(gs.balance + net);
+    const net    = payout - gs.bet;                   // net profit (for display)
+    gs.balance   = Math.round(gs.balance + payout);
     this._balanceText.setText(`$${gs.balance.toLocaleString()}`);
+    this.events.emit('game:balance_update', gs.balance);
+
     const tag = secondAccusation ? ' (Acc#2 — 40% cap)' : '';
     this._addClue(`✅ CORRECT! ${gs.round.suspects[gs.selectedIdx].name} is the killer!${tag}`, VI.HEX.GOLD);
     this._addClue(`💰 PAYOUT: +$${Math.round(net).toLocaleString()}`, VI.HEX.GOLD);
@@ -753,15 +815,16 @@ class GameScene extends Phaser.Scene {
 
   _resolveLoss() {
     const gs = this.gs;
-    // INSURANCE: 50% refund of the (uplifted) bet on a wrong call
-    const refund  = gs.round.getInsuranceRefund(gs.bet);
-    const lost    = gs.bet - refund;
-    gs.balance    = Math.max(0, Math.round(gs.balance - lost));
-    this._balanceText.setText(`$${gs.balance.toLocaleString()}`);
-    this._addClue(`❌ WRONG AGAIN! Killer was ${gs.round.suspects[gs.round.killerIdx].name}.`, VI.HEX.VI_RED);
+    // Bet was already taken from the balance on confirm. INSURANCE refunds 50%.
+    const refund = gs.round.getInsuranceRefund(gs.bet);
     if (refund > 0) {
+      gs.balance = Math.round(gs.balance + refund);
+      this._balanceText.setText(`$${gs.balance.toLocaleString()}`);
+      this.events.emit('game:balance_update', gs.balance);
       this._addClue(`🛡 INSURANCE refund: +$${refund.toLocaleString()}`, VI.HEX.CYAN);
     }
+    const lost = gs.bet - refund;                     // net loss (for display)
+    this._addClue(`❌ WRONG AGAIN! Killer was ${gs.round.suspects[gs.round.killerIdx].name}.`, VI.HEX.VI_RED);
     this._addClue(`💸 NET LOST: -$${lost.toLocaleString()}`, VI.HEX.MAGENTA);
     this._markGuiltySuspect(gs.round.killerIdx);
     this._showResultOverlay(false, -lost);
@@ -887,9 +950,11 @@ class GameScene extends Phaser.Scene {
       return;
     }
     this._stopTimer();
+    // Bet was already deducted on confirm. Credit the cash-out amount in full.
     const payout = gs.round.calculateCashOut(gs.bet, this._folderPct);
-    gs.balance   = Math.round(gs.balance + payout - gs.bet);
+    gs.balance   = Math.round(gs.balance + payout);
     this._balanceText.setText(`$${gs.balance.toLocaleString()}`);
+    this.events.emit('game:balance_update', gs.balance);
     this._addClue(`💸 CASH OUT: collected $${payout.toLocaleString()}.`, VI.HEX.GOLD);
     this._showResultOverlay(true, payout - gs.bet);
     this.events.emit('game:win', { payout: payout - gs.bet, balance: gs.balance });

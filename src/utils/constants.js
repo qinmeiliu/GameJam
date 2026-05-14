@@ -80,6 +80,7 @@ const VI = {
   // --- Phase Timings (ms) ─────────────────────────────────────
   PHASE_TIMINGS: {
     INTRO_MS:           1500,    // case-reveal hold before betting opens
+    BETTING_TIMER_MS:  60000,    // BETTING-phase soft countdown (display only, no auto-advance)
     ACCUSE_TOTAL_MS:   30000,    // accuse-phase folder-burn duration (GDD: 30s)
     CLUE_1_AT_MS:       8000,    // first clue fires this many ms into ACCUSE
     CLUE_2_AT_MS:      18000,    // second clue fires

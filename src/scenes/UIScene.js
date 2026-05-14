@@ -393,7 +393,7 @@ class UIScene extends Phaser.Scene {
   _onSuspectSelected(data) {
     if (!this._suspectLabel) {
       const { height } = this.scale;
-      this.add.text(16, height - 92 - 68, 'SUSPECT', {
+      this._suspectHeader = this.add.text(16, height - 92 - 68, 'SUSPECT', {
         fontFamily: VI.FONTS.BODY, fontSize: '10px',
         color: VI.HEX.CYAN, letterSpacing: 4,
       });
@@ -402,7 +402,17 @@ class UIScene extends Phaser.Scene {
       });
     }
     this._suspectLabel.setText(data.suspect.name.toUpperCase());
+    this._suspectHeader.setVisible(true);
+    this._suspectLabel.setVisible(true);
     this._gs.events.emit('ui:suspect_select', data.idx);
+  }
+
+  // Hide the suspect label whenever a fresh round begins — otherwise the
+  // last suspect from the previous round stays pinned to the bottom-left.
+  _clearSuspectLabel() {
+    if (this._suspectHeader) this._suspectHeader.setVisible(false);
+    if (this._suspectLabel)  this._suspectLabel.setVisible(false);
+    if (this._suspectLabel)  this._suspectLabel.setText('—');
   }
 
   // ── Event handlers ─────────────────────────────────────────
@@ -411,6 +421,9 @@ class UIScene extends Phaser.Scene {
     this._accumulatedBet = 0;
     this._currentBet     = 0;
     if (this._betText) this._betText.setText('$0');
+    // Wipe the previous round's SUSPECT label so the bottom-left doesn't
+    // keep showing "THE MIME" or whoever was picked last time.
+    this._clearSuspectLabel();
     // Re-enable action cards
     if (this._actionCards) {
       // Rebuild strip — easiest approach

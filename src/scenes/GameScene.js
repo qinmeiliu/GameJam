@@ -97,10 +97,23 @@ class GameScene extends Phaser.Scene {
 
     // Destroy every overlay/badge created during the previous round, so
     // the scoreboard, killer marker, etc. don't bleed into the new case.
+    //
+    // Belt + suspenders: BOTH the explicit array AND a Phaser Container
+    // are walked. The Container is the authoritative cleanup path because
+    // its destroy() cascades to ALL children regardless of whether they
+    // were also pushed into the array.
     if (this._roundOverlayObjs) {
-      this._roundOverlayObjs.forEach(o => { if (o && o.destroy) o.destroy(); });
+      this._roundOverlayObjs.forEach(o => { if (o && o.destroy && !o.destroyed) {
+        try { o.destroy(); } catch (e) { /* swallow — keep cleanup going */ }
+      }});
     }
     this._roundOverlayObjs = [];
+
+    if (this._roundContainer && this._roundContainer.scene) {
+      // Container.destroy() removes the container AND all children by default
+      try { this._roundContainer.destroy(); } catch (e) { /* ignore */ }
+    }
+    this._roundContainer = this.add.container(0, 0);
 
     this._refreshCasePanel();
     this._refreshSuspects();
@@ -988,8 +1001,11 @@ class GameScene extends Phaser.Scene {
       shadow: { blur: 12, color: VI.HEX.MAGENTA, fill: true },
     }).setOrigin(0.5);
     this.tweens.add({ targets: badge, scaleX: 1.12, scaleY: 1.12, duration: 400, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
+    // Track in BOTH the array and the round container — _startRound will
+    // tear them all down regardless of which path catches them.
     if (!this._roundOverlayObjs) this._roundOverlayObjs = [];
     this._roundOverlayObjs.push(badge);
+    if (this._roundContainer) this._roundContainer.add(badge);
   }
 
   _showResultOverlay(win, delta) {
@@ -1069,11 +1085,15 @@ class GameScene extends Phaser.Scene {
       this._startRound();          // cleans up everything via _roundOverlayObjs
     });
 
-    // Track everything for cleanup at _startRound
+    // Track everything for cleanup at _startRound — array + container
     if (!this._roundOverlayObjs) this._roundOverlayObjs = [];
-    this._roundOverlayObjs.push(overlay, panel, headline, verdictText, deltaText, balanceText, btnG, btnLbl, zone);
-    if (multText)    this._roundOverlayObjs.push(multText);
-    if (multSubText) this._roundOverlayObjs.push(multSubText);
+    const all = [overlay, panel, headline, verdictText, deltaText, balanceText, btnG, btnLbl, zone];
+    if (multText)    all.push(multText);
+    if (multSubText) all.push(multSubText);
+    all.forEach(o => this._roundOverlayObjs.push(o));
+    if (this._roundContainer) {
+      this._roundContainer.add(all);
+    }
 
     // Cameras
     if (win) { this.cameras.main.flash(400, 253, 224, 84, false); }

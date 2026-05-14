@@ -18,6 +18,7 @@ class LobbyScene extends Phaser.Scene {
     this._optionalOn   = [false, false, false];              // seats 4, 5, 6 — start empty
     this._seats        = [];                                 // sprite/text refs per seat
     this._plateRefs    = {};                                 // refs into center plaque
+    this._launching    = false;                              // double-click guard for table tap
 
     // Pick 6 random characters from the full 8-character roster.
     // Each seat keeps its character for the whole scene visit; re-entering
@@ -42,7 +43,7 @@ class LobbyScene extends Phaser.Scene {
     this._buildRoundTable();
     this._buildSeats();
     this._buildCenterPlate();
-    this._buildStartButton();
+    this._buildTableActionHint();
 
     this._refreshAll();
   }
@@ -94,7 +95,7 @@ class LobbyScene extends Phaser.Scene {
     g.fillStyle(VI.COLORS.FLOOD_BLACK, 0.6);
     g.fillCircle(tx, ty, r - 18);
 
-    // Neon rim (Glow-Fi)
+    // Cyan rim (Glow-Fi base layer)
     g.lineStyle(2, VI.COLORS.CYAN, 0.85);
     g.strokeCircle(tx, ty, r);
     g.lineStyle(8, VI.COLORS.CYAN, 0.12);
@@ -107,6 +108,84 @@ class LobbyScene extends Phaser.Scene {
       const rad = Phaser.Math.DegToRad(a);
       dotG.fillCircle(tx + (r - 28) * Math.cos(rad), ty + (r - 28) * Math.sin(rad), 1.6);
     }
+
+    // ── Pulsing GOLD "call to action" ring just outside the table ──
+    //    Always visible, gently breathing so the eye lands on the table.
+    this._tablePulseG = this.add.graphics();
+    const drawPulseRing = (alpha, ringR) => {
+      this._tablePulseG.clear();
+      this._tablePulseG.lineStyle(3, VI.COLORS.GOLD, alpha);
+      this._tablePulseG.strokeCircle(tx, ty, ringR);
+      this._tablePulseG.lineStyle(14, VI.COLORS.GOLD, alpha * 0.18);
+      this._tablePulseG.strokeCircle(tx, ty, ringR);
+    };
+    drawPulseRing(0.65, r + 6);
+    // Tween a pseudo-property and redraw each step
+    this._tablePulseT = { alpha: 0.4, ringR: r + 4 };
+    this.tweens.add({
+      targets: this._tablePulseT,
+      alpha:   { from: 0.35, to: 0.95 },
+      ringR:   { from: r + 4, to: r + 12 },
+      duration: 1100, yoyo: true, repeat: -1, ease: 'Sine.easeInOut',
+      onUpdate: () => drawPulseRing(this._tablePulseT.alpha, this._tablePulseT.ringR),
+    });
+    // Stash the redraw fn so hover/click can override
+    this._tableDrawPulse = drawPulseRing;
+
+    // ── Interactive zone — the entire felt becomes the click target ──
+    const tableZone = this.add.zone(tx, ty, r * 2, r * 2).setInteractive(
+      new Phaser.Geom.Circle(r, r, r),
+      Phaser.Geom.Circle.Contains,
+      { cursor: 'pointer' }
+    );
+
+    tableZone.on('pointerover', () => this._onTableHover(true));
+    tableZone.on('pointerout',  () => this._onTableHover(false));
+    tableZone.on('pointerup',   () => this._startInvestigation());
+  }
+
+  // ── Table hover state — brighten the rim + the CTA hint ─────
+
+  _onTableHover(hovering) {
+    this._tableHovering = hovering;
+    if (this._tableHintLabel) {
+      this._tableHintLabel.setColor(hovering ? '#ffffff' : VI.HEX.GOLD);
+      this._tableHintLabel.setScale(hovering ? 1.08 : 1);
+    }
+  }
+
+  // ── Click → fly to GameScene ────────────────────────────────
+
+  _startInvestigation() {
+    if (this._launching) return;
+    this._launching = true;
+
+    // Big celebratory flash on the table area, then transition
+    const tx = this._tableCenterX();
+    const ty = this._tableCenterY();
+    const burst = this.add.graphics();
+    burst.fillStyle(VI.COLORS.GOLD, 0.6);
+    burst.fillCircle(tx, ty, this._tableRadius());
+    this.tweens.add({
+      targets: burst,
+      alpha: { from: 0.6, to: 0 },
+      scale: { from: 1, to: 1.4 },
+      duration: 360, ease: 'Cubic.easeOut',
+      onComplete: () => burst.destroy(),
+    });
+
+    this.cameras.main.flash(220, 253, 224, 84, false);
+
+    this.time.delayedCall(260, () => {
+      this.scene.start('GameScene', {
+        balance:      this._balance,
+        suspectCount: this._suspectCount(),
+      });
+      this.scene.launch('UIScene', {
+        balance:      this._balance,
+        suspectCount: this._suspectCount(),
+      });
+    });
   }
 
   // ── Seats (6 hexes ringed around the table) ─────────────────
@@ -413,49 +492,27 @@ class LobbyScene extends Phaser.Scene {
     this._refreshPlate();
   }
 
-  // ── BEGIN INVESTIGATION button ──────────────────────────────
+  // ── Table CTA hint ──────────────────────────────────────────
+  // The whole table is now the click target. This text sits just below
+  // the centre plate (still inside the table felt) and pulses gold so
+  // players know what to click.
 
-  _buildStartButton() {
-    const { width, height } = this.scale;
-    const x = width / 2;
-    const y = height - 56;
-    const bw = 360, bh = 56;
-    const btn = this.add.graphics();
+  _buildTableActionHint() {
+    const tx = this._tableCenterX();
+    const ty = this._tableCenterY() + 105;   // below the centre plate, inside the table
 
-    const drawNormal = () => {
-      btn.clear();
-      btn.fillStyle(VI.COLORS.VI_PURPLE, 1);
-      btn.fillRoundedRect(x - bw / 2, y - bh / 2, bw, bh, 10);
-      btn.lineStyle(2, VI.COLORS.GOLD, 0.85);
-      btn.strokeRoundedRect(x - bw / 2, y - bh / 2, bw, bh, 10);
-    };
-    const drawHover = () => {
-      btn.clear();
-      btn.fillStyle(VI.COLORS.MAGENTA, 1);
-      btn.fillRoundedRect(x - bw / 2, y - bh / 2, bw, bh, 10);
-      btn.lineStyle(3, VI.COLORS.GOLD, 1);
-      btn.strokeRoundedRect(x - bw / 2, y - bh / 2, bw, bh, 10);
-    };
-    drawNormal();
-
-    const label = this.add.text(x, y, '🔍  BEGIN INVESTIGATION', {
-      fontFamily: VI.FONTS.HEADING, fontSize: '20px', color: VI.HEX.GOLD,
-      stroke: '#000', strokeThickness: 4, letterSpacing: 4,
+    this._tableHintLabel = this.add.text(tx, ty, '🔍  TAP TABLE TO BEGIN', {
+      fontFamily: VI.FONTS.HEADING, fontSize: '15px',
+      color: VI.HEX.GOLD, letterSpacing: 5,
+      stroke: '#000', strokeThickness: 3,
+      shadow: { blur: 10, color: VI.HEX.GOLD, fill: true },
     }).setOrigin(0.5);
 
-    const zone = this.add.zone(x, y, bw, bh).setInteractive({ cursor: 'pointer' });
-    zone.on('pointerover', () => { drawHover();  label.setColor('#ffffff'); });
-    zone.on('pointerout',  () => { drawNormal(); label.setColor(VI.HEX.GOLD); });
-    zone.on('pointerdown', () => this.cameras.main.flash(150, 253, 224, 84, false));
-    zone.on('pointerup', () => {
-      this.scene.start('GameScene', {
-        balance:      this._balance,
-        suspectCount: this._suspectCount(),
-      });
-      this.scene.launch('UIScene', {
-        balance:      this._balance,
-        suspectCount: this._suspectCount(),
-      });
+    // Gentle alpha breath to draw the eye to the table
+    this.tweens.add({
+      targets: this._tableHintLabel,
+      alpha:   { from: 0.6, to: 1 },
+      duration: 950, yoyo: true, repeat: -1, ease: 'Sine.easeInOut',
     });
   }
 

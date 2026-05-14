@@ -40,6 +40,11 @@ class UIScene extends Phaser.Scene {
     this._buildAccuseButton(width, height);
     this._setAccuseVisible(false);
 
+    // The bet UI is also gated by phase — start hidden so it only appears
+    // once GameScene emits the BETTING phase change. (No flash of bet UI
+    // during the INTRO cinematic.)
+    this._setBetBuilderVisible(false);
+
     // Toast layer (top of z-order)
     this._toastY = 130;
 
@@ -84,11 +89,11 @@ class UIScene extends Phaser.Scene {
 
   _onPhaseChange({ phase }) {
     const P = VI.PHASES;
-    if (phase === P.ACCUSE || phase === P.SECOND_CHANCE) {
-      this._setAccuseVisible(true);
-    } else {
-      this._setAccuseVisible(false);
-    }
+    const inBetting = phase === P.BETTING;
+    const inAccuse  = phase === P.ACCUSE || phase === P.SECOND_CHANCE;
+
+    this._setBetBuilderVisible(inBetting);
+    this._setAccuseVisible(inAccuse);
   }
 
   _setAccuseVisible(visible) {
@@ -100,6 +105,16 @@ class UIScene extends Phaser.Scene {
         if (typeof o.setInteractive === 'function' && visible)      o.setInteractive({ cursor: 'pointer' });
       });
     }
+  }
+
+  _setBetBuilderVisible(visible) {
+    if (!this._betBuilderRefs) return;
+    this._betBuilderRefs.forEach(o => {
+      if (!o) return;
+      if (typeof o.setVisible === 'function') o.setVisible(visible);
+      if (typeof o.disableInteractive === 'function' && !visible) o.disableInteractive();
+      if (typeof o.setInteractive === 'function' && visible)      o.setInteractive({ cursor: 'pointer' });
+    });
   }
 
   // ── Panel & layout ─────────────────────────────────────────
@@ -131,10 +146,15 @@ class UIScene extends Phaser.Scene {
     tg.lineStyle(1, VI.COLORS.CYAN, 0.2);
     tg.strokeRoundedRect(startX - 24, cy - 26, tw, 52, 26);
 
+    if (!this._betBuilderRefs) this._betBuilderRefs = [];
+    this._betBuilderRefs.push(tg);
+
     this._chipObjs = {};
     chips.forEach((value, i) => {
       const x = startX + i * spacing;
-      this._chipObjs[value] = this._drawChip(x, cy, value);
+      const chip = this._drawChip(x, cy, value);
+      this._chipObjs[value] = chip;
+      this._betBuilderRefs.push(chip.g, chip.txt, chip.zone);
     });
   }
 
@@ -182,7 +202,7 @@ class UIScene extends Phaser.Scene {
     const by = height - panelH / 2;
     const bx = width * 0.42;
 
-    this.add.text(bx, by - 16, 'CURRENT BET', {
+    const lbl = this.add.text(bx, by - 16, 'CURRENT BET', {
       fontFamily: VI.FONTS.BODY, fontSize: '10px',
       color: VI.HEX.CYAN, letterSpacing: 4,
     }).setOrigin(0.5);
@@ -232,6 +252,10 @@ class UIScene extends Phaser.Scene {
       gs.events.emit('ui:bet_confirmed', this._currentBet);
       this._showToast(`Bet confirmed: $${this._currentBet}`, VI.HEX.VI_AMBER, 900);
     });
+
+    // Track every bet-builder element so we can show/hide as a group
+    if (!this._betBuilderRefs) this._betBuilderRefs = [];
+    this._betBuilderRefs.push(lbl, this._betText, clrTxt, clrZone, cfG, cfLbl, cfZone);
   }
 
   _refreshBetDisplay(amt) {
@@ -310,39 +334,54 @@ class UIScene extends Phaser.Scene {
   // ── Accuse button ──────────────────────────────────────────
 
   _buildAccuseButton(width, height) {
-    const bw = 160, bh = 54;
-    const bx = width - 100, by = height - 90 - bh / 2 - 8;
+    // Center-bottom, large — fills the space where the chip tray was.
+    const bw = 380, bh = 72;
+    const bx = width / 2;
+    const by = height - 90 / 2;     // vertically centered in the bottom panel
     const g  = this.add.graphics();
 
     const _draw = (hover) => {
       g.clear();
       if (hover) {
         g.fillStyle(VI.COLORS.MAGENTA, 1);
-        g.fillRoundedRect(bx - bw/2, by - bh/2, bw, bh, 10);
+        g.fillRoundedRect(bx - bw/2, by - bh/2, bw, bh, 14);
+        g.lineStyle(14, VI.COLORS.GOLD, 0.18);
+        g.strokeRoundedRect(bx - bw/2, by - bh/2, bw, bh, 14);
         g.lineStyle(3, VI.COLORS.GOLD, 1);
-        g.strokeRoundedRect(bx - bw/2, by - bh/2, bw, bh, 10);
+        g.strokeRoundedRect(bx - bw/2, by - bh/2, bw, bh, 14);
       } else {
-        g.fillStyle(VI.COLORS.VI_RED, 0.85);
-        g.fillRoundedRect(bx - bw/2, by - bh/2, bw, bh, 10);
-        g.lineStyle(2, VI.COLORS.MAGENTA, 0.7);
-        g.strokeRoundedRect(bx - bw/2, by - bh/2, bw, bh, 10);
+        g.fillStyle(VI.COLORS.VI_RED, 0.9);
+        g.fillRoundedRect(bx - bw/2, by - bh/2, bw, bh, 14);
+        g.lineStyle(14, VI.COLORS.MAGENTA, 0.12);
+        g.strokeRoundedRect(bx - bw/2, by - bh/2, bw, bh, 14);
+        g.lineStyle(2, VI.COLORS.GOLD, 0.85);
+        g.strokeRoundedRect(bx - bw/2, by - bh/2, bw, bh, 14);
       }
     };
     _draw(false);
 
-    const lbl = this.add.text(bx, by, '🔍 ACCUSE!', {
-      fontFamily: VI.FONTS.HEADING, fontSize: '17px', color: '#ffffff',
-      stroke: '#000', strokeThickness: 3,
+    const lbl = this.add.text(bx, by, '🔍  ACCUSE!', {
+      fontFamily: VI.FONTS.HEADING, fontSize: '28px', color: VI.HEX.GOLD,
+      stroke: '#000', strokeThickness: 5, letterSpacing: 6,
+      shadow: { blur: 14, color: VI.HEX.GOLD, fill: true },
     }).setOrigin(0.5);
 
     const zone = this.add.zone(bx, by, bw, bh).setInteractive({ cursor: 'pointer' });
-    zone.on('pointerover',  () => { _draw(true);  lbl.setColor(VI.HEX.GOLD); });
-    zone.on('pointerout',   () => { _draw(false); lbl.setColor('#ffffff'); });
-    zone.on('pointerdown',  () => this.cameras.main.flash(80, 255, 0, 80, false));
+    zone.on('pointerover',  () => { _draw(true);  lbl.setColor('#ffffff'); });
+    zone.on('pointerout',   () => { _draw(false); lbl.setColor(VI.HEX.GOLD); });
+    zone.on('pointerdown',  () => this.cameras.main.flash(80, 253, 0, 80, false));
     zone.on('pointerup', () => {
       const gs = this._gs;
       if (!gs) return;
       gs.events.emit('ui:accuse');
+    });
+
+    // Gentle alpha breath so the button calls out for attention during ACCUSE.
+    // Stored on the graphics + label so they pulse together.
+    this._accusePulse = this.tweens.add({
+      targets: [g, lbl],
+      alpha: { from: 0.85, to: 1 },
+      duration: 850, yoyo: true, repeat: -1, ease: 'Sine.easeInOut',
     });
 
     // Stash refs so _setAccuseVisible can toggle the whole button group together

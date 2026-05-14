@@ -246,9 +246,12 @@ class GameScene extends Phaser.Scene {
     const wrongSpr = this._suspectSprites[wrongIdx];
     if (wrongSpr) {
       this.tweens.add({
-        targets: [wrongSpr.g, wrongSpr.nameText, wrongSpr.subtextText, wrongSpr.numText],
+        targets: [wrongSpr.g, wrongSpr.nameText, wrongSpr.numText],
         alpha: 0.15, duration: 400,
       });
+      // Hide their quote bubble for good
+      if (wrongSpr.bubbleG)    wrongSpr.bubbleG.setVisible(false);
+      if (wrongSpr.bubbleText) wrongSpr.bubbleText.setVisible(false);
       wrongSpr.zone.disableInteractive();
     }
     this._addClue(`❌ WRONG! ${gs.round.suspects[wrongIdx].name} is innocent.`, VI.HEX.MAGENTA);
@@ -455,7 +458,8 @@ class GameScene extends Phaser.Scene {
     if (!r) return;
 
     this._suspectSprites.forEach(s => {
-      [s.g, s.nameText, s.subtextText, s.highlightG, s.zone, s.numText].forEach(o => { if (o) o.destroy(); });
+      [s.g, s.nameText, s.highlightG, s.zone, s.numText, s.bubbleG, s.bubbleText]
+        .forEach(o => { if (o) o.destroy(); });
     });
     this._suspectSprites = [];
 
@@ -485,37 +489,87 @@ class GameScene extends Phaser.Scene {
       }).setOrigin(0.5);
 
       const nameText = this.add.text(cx, cy + tokenR + 14, sus.name.toUpperCase(), {
-        fontFamily: VI.FONTS.HEADING, fontSize: '12px',
-        color: VI.HEX.CREAM, stroke: '#000', strokeThickness: 3,
+        fontFamily: VI.FONTS.HEADING, fontSize: '13px',
+        color: VI.HEX.CREAM, stroke: '#000', strokeThickness: 3, letterSpacing: 2,
       }).setOrigin(0.5);
 
-      const subtextText = this.add.text(cx, cy + tokenR + 30, sus.alibi || '…', {
-        fontFamily: VI.FONTS.MONO, fontSize: '10px',
-        color: '#ffffff44', wordWrap: { width: cellW - 20 },
+      // ── Hover quote bubble (built hidden) ──────────────────
+      const bubbleW = Math.min(260, cellW - 12);
+      const bubbleH = 92;
+      const bubbleX = cx;
+      const bubbleY = cy - tokenR - 64;
+      const bubbleG = this.add.graphics();
+      const drawBubble = () => {
+        bubbleG.clear();
+        bubbleG.fillStyle(VI.COLORS.PANEL_SURFACE, 0.97);
+        bubbleG.fillRoundedRect(bubbleX - bubbleW/2, bubbleY - bubbleH/2, bubbleW, bubbleH, 10);
+        bubbleG.lineStyle(8, sus.color, 0.10);
+        bubbleG.strokeRoundedRect(bubbleX - bubbleW/2, bubbleY - bubbleH/2, bubbleW, bubbleH, 10);
+        bubbleG.lineStyle(2, sus.color, 0.85);
+        bubbleG.strokeRoundedRect(bubbleX - bubbleW/2, bubbleY - bubbleH/2, bubbleW, bubbleH, 10);
+        // Tail pointing down to the token
+        bubbleG.fillStyle(VI.COLORS.PANEL_SURFACE, 0.97);
+        bubbleG.fillTriangle(
+          bubbleX - 8, bubbleY + bubbleH/2,
+          bubbleX + 8, bubbleY + bubbleH/2,
+          bubbleX,     bubbleY + bubbleH/2 + 10
+        );
+        bubbleG.lineStyle(2, sus.color, 0.85);
+        bubbleG.lineBetween(bubbleX - 8, bubbleY + bubbleH/2, bubbleX, bubbleY + bubbleH/2 + 10);
+        bubbleG.lineBetween(bubbleX + 8, bubbleY + bubbleH/2, bubbleX, bubbleY + bubbleH/2 + 10);
+      };
+      drawBubble();
+
+      const bubbleText = this.add.text(bubbleX, bubbleY, sus.alibi || '…', {
+        fontFamily: VI.FONTS.BODY, fontSize: '13px',
+        color: VI.HEX.CREAM, align: 'center', fontStyle: 'italic',
+        wordWrap: { width: bubbleW - 24 }, lineSpacing: 3,
       }).setOrigin(0.5);
 
+      bubbleG.setAlpha(0);
+      bubbleText.setAlpha(0);
+
+      // ── Hit zone (always interactive; handlers phase-gate themselves) ──
       const zone = this.add.zone(cx, cy, cellW - 8, cellH - 8).setInteractive({ cursor: 'pointer' });
+
+      const showBubble = () => {
+        this.tweens.killTweensOf([bubbleG, bubbleText]);
+        this.tweens.add({ targets: [bubbleG, bubbleText], alpha: 1, duration: 140, ease: 'Cubic.easeOut' });
+      };
+      const hideBubble = () => {
+        this.tweens.killTweensOf([bubbleG, bubbleText]);
+        this.tweens.add({ targets: [bubbleG, bubbleText], alpha: 0, duration: 140, ease: 'Cubic.easeIn' });
+      };
+
       zone.on('pointerover', () => {
-        if (this.gs.state !== 'playing' || this.gs.selectedIdx === idx) return;
-        highlightG.clear();
-        highlightG.lineStyle(2, VI.COLORS.GOLD, 0.5);
-        highlightG.strokeCircle(cx, cy, tokenR + 8);
+        // Only respond once suspects are revealed.
+        if (this.gs.phase !== VI.PHASES.ACCUSE && this.gs.phase !== VI.PHASES.SECOND_CHANCE) return;
+        if (this.gs.selectedIdx !== idx) {
+          highlightG.clear();
+          highlightG.lineStyle(2, VI.COLORS.GOLD, 0.5);
+          highlightG.strokeCircle(cx, cy, tokenR + 8);
+        }
+        showBubble();
       });
       zone.on('pointerout', () => {
         if (this.gs.selectedIdx !== idx) highlightG.clear();
+        hideBubble();
       });
       zone.on('pointerup', () => {
-        if (this.gs.state !== 'playing') return;
+        if (this.gs.phase !== VI.PHASES.ACCUSE && this.gs.phase !== VI.PHASES.SECOND_CHANCE) return;
         this.gs.selectedIdx = idx;
         this._refreshSuspectHighlights();
         this.events.emit('game:suspect_selected', { idx, suspect: sus });
       });
 
       // Suspects start hidden — they reveal when ACCUSE phase begins.
-      [g, numText, nameText, subtextText].forEach(o => o.setAlpha(0));
-      zone.disableInteractive();
+      [g, numText, nameText].forEach(o => o.setAlpha(0));
 
-      this._suspectSprites.push({ g, numText, nameText, subtextText, highlightG, zone, cx, cy, tokenR, idx, sus });
+      this._suspectSprites.push({
+        g, numText, nameText, highlightG, zone,
+        bubbleG, bubbleText,
+        cx, cy, tokenR, idx, sus,
+      });
     });
   }
 
@@ -523,11 +577,10 @@ class GameScene extends Phaser.Scene {
   _revealSuspects() {
     this._suspectSprites.forEach((s, i) => {
       this.tweens.add({
-        targets: [s.g, s.numText, s.nameText, s.subtextText],
+        targets: [s.g, s.numText, s.nameText],
         alpha: 1,
         duration: 400, delay: i * 70, ease: 'Cubic.easeOut',
       });
-      s.zone.setInteractive({ cursor: 'pointer' });
     });
   }
 
@@ -632,7 +685,9 @@ class GameScene extends Phaser.Scene {
       fontFamily: VI.FONTS.HEADING, fontSize: '13px',
       color: VI.HEX.GOLD, letterSpacing: 4,
     }).setOrigin(0.5);
-    this.tweens.add({
+    // Stash the pulse tween so _hideCaseFile can kill it. Otherwise the
+    // looping alpha tween fights the fade-out and the CTA never disappears.
+    this._cfCTAPulse = this.tweens.add({
       targets: this._cfCTA, alpha: { from: 0.6, to: 1 },
       duration: 950, yoyo: true, repeat: -1, ease: 'Sine.easeInOut',
     });
@@ -667,7 +722,10 @@ class GameScene extends Phaser.Scene {
 
   _hideCaseFile() {
     if (!this._caseFileElements) return;
+    // Kill the CTA pulse — otherwise it loops alpha 0.6→1 and the fade fails.
+    if (this._cfCTAPulse) { this._cfCTAPulse.stop(); this._cfCTAPulse = null; }
     this._caseFileElements.forEach(e => {
+      this.tweens.killTweensOf(e);
       this.tweens.add({
         targets: e, alpha: 0,
         duration: 220, ease: 'Cubic.easeIn',

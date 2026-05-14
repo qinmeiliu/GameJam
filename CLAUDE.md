@@ -111,6 +111,7 @@ Ducky Detective/
 - Scene communication via `this.events.emit / on` with `game:*` (from GameScene) and `ui:*` (from UIScene) prefixes.
 - Firebase plan: Realtime DB free tier, security rules hide `actualKiller` until `state === 'reveal'`.
 - Single player = 1-player room. No special-case code needed.
+- **Cache busting:** every `<script>` in `index.html` has `?v=YYYYMMDD-N` query strings. **Bump this on every deploy** so browsers re-fetch fresh JS. Current version is in the script tags — when iterating, do a find-replace across `index.html` to bump (e.g. `20260513-4` → `20260513-5`). Without this, GitHub Pages CDN + browser caches will serve stale JS for hours and code changes look broken (this caused the Lobby randomization-not-working bug on 2026-05-13).
 
 ## VI BRAND CHEAT SHEET (from `constants.js`)
 

@@ -56,6 +56,10 @@ class GameScene extends Phaser.Scene {
     // Big case file panel (shown during BETTING phase only)
     this._buildCaseFilePanel();
 
+    // "← LOBBY" back-link, visible only during BETTING so the player can
+    // re-pick suspect count before committing a bet.
+    this._buildBackToLobbyButton();
+
     // Generate first round
     this._startRound();
 
@@ -114,6 +118,10 @@ class GameScene extends Phaser.Scene {
       try { this._roundContainer.destroy(); } catch (e) { /* ignore */ }
     }
     this._roundContainer = this.add.container(0, 0);
+    // Pin the round container to a high depth so scoreboard overlays
+    // (and the KILLER badge) render on top of suspect tokens, regardless
+    // of when the container was added relative to the rest of the scene.
+    this._roundContainer.setDepth(1000);
 
     this._refreshCasePanel();
     this._refreshSuspects();
@@ -195,6 +203,7 @@ class GameScene extends Phaser.Scene {
   _enter_BETTING() {
     this._showCaseFile();
     this._showTimerText();
+    this._setBackButtonVisible(true);   // re-pick suspects available only here
     this._timerElapsed = 0;
     this._timerExpired = false;
     this._updateTimerText();
@@ -211,6 +220,7 @@ class GameScene extends Phaser.Scene {
   _exit_BETTING() {
     this._stopTimer();
     this._hideCaseFile();
+    this._setBackButtonVisible(false);  // bet is locked; can no longer abandon
   }
 
   // ── Phase: ACCUSE ──────────────────────────────────────────
@@ -832,6 +842,58 @@ class GameScene extends Phaser.Scene {
         targets: e, alpha: 0,
         duration: 220, ease: 'Cubic.easeIn',
       });
+    });
+  }
+
+  // ── Back-to-Lobby button (BETTING phase only) ──────────────
+  // Lets the player abandon the current case and return to Lobby to
+  // re-pick suspect count. Hidden the moment a bet is locked in
+  // (ACCUSE onwards) since that decision is no longer reversible.
+  _buildBackToLobbyButton() {
+    const x = 24, y = 102;            // top-left, just below the case header bar
+    const bw = 130, bh = 32;
+
+    const g = this.add.graphics();
+    const drawNormal = () => {
+      g.clear();
+      g.fillStyle(VI.COLORS.PANEL_SURFACE, 0.92);
+      g.fillRoundedRect(x, y, bw, bh, 6);
+      g.lineStyle(1, VI.COLORS.CYAN, 0.45);
+      g.strokeRoundedRect(x, y, bw, bh, 6);
+    };
+    const drawHover = () => {
+      g.clear();
+      g.fillStyle(VI.COLORS.PANEL_SURFACE, 1);
+      g.fillRoundedRect(x, y, bw, bh, 6);
+      g.lineStyle(2, VI.COLORS.CYAN, 1);
+      g.strokeRoundedRect(x, y, bw, bh, 6);
+    };
+    drawNormal();
+
+    const lbl = this.add.text(x + bw / 2, y + bh / 2, '←  LOBBY', {
+      fontFamily: VI.FONTS.HEADING, fontSize: '12px',
+      color: VI.HEX.CYAN, letterSpacing: 4,
+    }).setOrigin(0.5);
+
+    const zone = this.add.zone(x + bw / 2, y + bh / 2, bw, bh).setInteractive({ cursor: 'pointer' });
+    zone.on('pointerover', () => { drawHover();  lbl.setColor(VI.HEX.GOLD); });
+    zone.on('pointerout',  () => { drawNormal(); lbl.setColor(VI.HEX.CYAN); });
+    zone.on('pointerup', () => {
+      // Tear down the timer + UI scene cleanly, then back to Lobby with
+      // the current balance carried over.
+      this._stopTimer();
+      this.scene.stop('UIScene');
+      this.scene.start('LobbyScene', { balance: this.gs.balance });
+    });
+
+    this._backBtnRefs = [g, lbl, zone];
+    this._setBackButtonVisible(false);  // hidden until BETTING enter
+  }
+
+  _setBackButtonVisible(visible) {
+    if (!this._backBtnRefs) return;
+    this._backBtnRefs.forEach(o => {
+      if (o && typeof o.setVisible === 'function') o.setVisible(visible);
     });
   }
 

@@ -8,6 +8,14 @@ class MenuScene extends Phaser.Scene {
     super({ key: 'MenuScene' });
   }
 
+  // Phaser reuses the scene instance across restarts, so any state stashed
+  // on `this` persists. init() runs on every scene.start('MenuScene') —
+  // perfect spot to reset the single-launch guard so returning from Lobby
+  // and pressing PLAY again actually works.
+  init() {
+    this._launched = false;
+  }
+
   create() {
     const { width, height } = this.scale;
     const cx = width / 2;

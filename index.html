@@ -21,7 +21,11 @@
     }
     canvas {
       display: block;
-      image-rendering: pixelated;
+      /* Let the browser use smooth filtering when upscaling our 1280×720
+         canvas to the user's window — important for text legibility.
+         (Was `pixelated` from the initial pixel-art scaffold; that made
+         text crunchy on any HiDPI / scaled display.) */
+      image-rendering: auto;
     }
     #game-container {
       position: relative;
@@ -36,17 +40,17 @@
 
   <!-- Cache-bust: bump ?v=… across all script tags below to force fresh fetches after a deploy -->
   <!-- Game data & systems (must load before scenes) -->
-  <script src="src/utils/constants.js?v=20260513-9"></script>
-  <script src="src/data/murders.js?v=20260513-9"></script>
-  <script src="src/systems/RoundController.js?v=20260513-9"></script>
+  <script src="src/utils/constants.js?v=20260513-10"></script>
+  <script src="src/data/murders.js?v=20260513-10"></script>
+  <script src="src/systems/RoundController.js?v=20260513-10"></script>
 
   <!-- Scenes (load order matters) -->
-  <script src="src/scenes/BootScene.js?v=20260513-9"></script>
-  <script src="src/scenes/PreloadScene.js?v=20260513-9"></script>
-  <script src="src/scenes/MenuScene.js?v=20260513-9"></script>
-  <script src="src/scenes/LobbyScene.js?v=20260513-9"></script>
-  <script src="src/scenes/GameScene.js?v=20260513-9"></script>
-  <script src="src/scenes/UIScene.js?v=20260513-9"></script>
-  <script src="src/main.js?v=20260513-9"></script>
+  <script src="src/scenes/BootScene.js?v=20260513-10"></script>
+  <script src="src/scenes/PreloadScene.js?v=20260513-10"></script>
+  <script src="src/scenes/MenuScene.js?v=20260513-10"></script>
+  <script src="src/scenes/LobbyScene.js?v=20260513-10"></script>
+  <script src="src/scenes/GameScene.js?v=20260513-10"></script>
+  <script src="src/scenes/UIScene.js?v=20260513-10"></script>
+  <script src="src/main.js?v=20260513-10"></script>
 </body>
 </html>

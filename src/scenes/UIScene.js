@@ -96,24 +96,24 @@ class UIScene extends Phaser.Scene {
     this._setAccuseVisible(inAccuse);
   }
 
+  // Visibility toggles are JUST that — visibility. Don't touch input state
+  // here: input was wired up at scene construction (zones already have
+  // handlers + hit areas, labels/graphics do NOT) and the handlers
+  // themselves phase-gate so off-phase clicks no-op anyway. If we
+  // setInteractive on Text labels, Phaser creates a hit area on the
+  // text bounds that steals clicks from the chip/confirm zones below.
+
   _setAccuseVisible(visible) {
-    if (this._accuseRefs) {
-      this._accuseRefs.forEach(o => {
-        if (!o) return;
-        if (typeof o.setVisible === 'function') o.setVisible(visible);
-        if (typeof o.disableInteractive === 'function' && !visible) o.disableInteractive();
-        if (typeof o.setInteractive === 'function' && visible)      o.setInteractive({ cursor: 'pointer' });
-      });
-    }
+    if (!this._accuseRefs) return;
+    this._accuseRefs.forEach(o => {
+      if (o && typeof o.setVisible === 'function') o.setVisible(visible);
+    });
   }
 
   _setBetBuilderVisible(visible) {
     if (!this._betBuilderRefs) return;
     this._betBuilderRefs.forEach(o => {
-      if (!o) return;
-      if (typeof o.setVisible === 'function') o.setVisible(visible);
-      if (typeof o.disableInteractive === 'function' && !visible) o.disableInteractive();
-      if (typeof o.setInteractive === 'function' && visible)      o.setInteractive({ cursor: 'pointer' });
+      if (o && typeof o.setVisible === 'function') o.setVisible(visible);
     });
   }
 

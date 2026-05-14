@@ -33,11 +33,12 @@ class UIScene extends Phaser.Scene {
     // Bet display
     this._buildBetDisplay(width, height);
 
-    // Action card strip
-    this._buildActionStrip(width, height);
+    // Action card strip — REMOVED for this milestone (will be redesigned)
+    // this._buildActionStrip(width, height);
 
-    // ACCUSE button
+    // ACCUSE button (hidden until ACCUSE phase begins)
     this._buildAccuseButton(width, height);
+    this._setAccuseVisible(false);
 
     // Toast layer (top of z-order)
     this._toastY = 130;
@@ -56,6 +57,7 @@ class UIScene extends Phaser.Scene {
     gs.events.on('game:bet_updated',      (a)  => this._refreshBetDisplay(a));
     gs.events.on('game:next_round',       (b)  => this._onNextRound(b));
     gs.events.on('game:action_used',      (id) => this._disableActionCard(id));
+    gs.events.on('game:phase_change',     (d)  => this._onPhaseChange(d));
 
     this.events.once('shutdown', () => {
       gs.events.off('game:round_start');
@@ -70,7 +72,34 @@ class UIScene extends Phaser.Scene {
       gs.events.off('game:bet_updated');
       gs.events.off('game:next_round');
       gs.events.off('game:action_used');
+      gs.events.off('game:phase_change');
     });
+  }
+
+  // ── Phase-driven visibility ─────────────────────────────────
+  // BETTING:        chip tray + bet display + confirm-bet visible. ACCUSE hidden.
+  // ACCUSE / SC:    ACCUSE button visible. Chip tray locked.
+  // ACCUSATION_*:   everything dimmed (round resolving).
+  // SCOREBOARD:     everything hidden until next round.
+
+  _onPhaseChange({ phase }) {
+    const P = VI.PHASES;
+    if (phase === P.ACCUSE || phase === P.SECOND_CHANCE) {
+      this._setAccuseVisible(true);
+    } else {
+      this._setAccuseVisible(false);
+    }
+  }
+
+  _setAccuseVisible(visible) {
+    if (this._accuseRefs) {
+      this._accuseRefs.forEach(o => {
+        if (!o) return;
+        if (typeof o.setVisible === 'function') o.setVisible(visible);
+        if (typeof o.disableInteractive === 'function' && !visible) o.disableInteractive();
+        if (typeof o.setInteractive === 'function' && visible)      o.setInteractive({ cursor: 'pointer' });
+      });
+    }
   }
 
   // ── Panel & layout ─────────────────────────────────────────
@@ -136,7 +165,9 @@ class UIScene extends Phaser.Scene {
     zone.on('pointerout',   () => { g.setScale(1);    txt.setScale(1); });
     zone.on('pointerup',    () => {
       const gs = this._gs;
-      if (!gs || gs.gs.state !== 'playing') return;
+      if (!gs) return;
+      // Chips only respond in BETTING — after confirm, bet is locked.
+      if (gs.gs.phase !== VI.PHASES.BETTING) return;
       this._accumulatedBet += value;
       this._refreshBetDisplay(this._accumulatedBet);
     });
@@ -191,7 +222,9 @@ class UIScene extends Phaser.Scene {
     cfZone.on('pointerup', () => {
       if (this._accumulatedBet <= 0) { this._showToast('Place a bet first!', VI.HEX.MAGENTA, 1200); return; }
       const gs = this._gs;
-      if (!gs || gs.gs.state !== 'playing') return;
+      if (!gs) return;
+      // CONFIRM BET is only valid during BETTING (transitions us to ACCUSE)
+      if (gs.gs.phase !== VI.PHASES.BETTING) return;
       if (this._accumulatedBet > gs.gs.balance) {
         this._showToast('Not enough balance!', VI.HEX.MAGENTA, 1200); return;
       }
@@ -311,6 +344,9 @@ class UIScene extends Phaser.Scene {
       if (!gs) return;
       gs.events.emit('ui:accuse');
     });
+
+    // Stash refs so _setAccuseVisible can toggle the whole button group together
+    this._accuseRefs = [g, lbl, zone];
   }
 
   // ── Suspect selected indicator (bottom-left) ───────────────

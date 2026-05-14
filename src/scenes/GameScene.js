@@ -50,6 +50,9 @@ class GameScene extends Phaser.Scene {
     // Clue feed area
     this._buildClueFeed();
 
+    // Big case file panel (shown during BETTING phase only)
+    this._buildCaseFilePanel();
+
     // Generate first round
     this._startRound();
 
@@ -163,24 +166,42 @@ class GameScene extends Phaser.Scene {
   }
 
   // ── Phase: BETTING ─────────────────────────────────────────
+  // Open-ended: case file is shown, player reads + places a bet. No timer.
   _enter_BETTING() {
-    this._addClue('💼 Folder ignited. Place your bet.', VI.HEX.VI_AMBER);
+    this._showCaseFile();
+    this._hideTimerText();        // no countdown during betting
+    this._addClue('💼 Read the case file. Place your bet to deal the suspects.', VI.HEX.VI_AMBER);
+  }
+  _exit_BETTING() {
+    this._hideCaseFile();
+  }
+
+  // ── Phase: ACCUSE ──────────────────────────────────────────
+  // Bet is locked. Suspects appear with their quotes. Folder starts
+  // burning over ACCUSE_TOTAL_MS. Player has to call it before the
+  // folder hits the floor.
+  _enter_ACCUSE() {
+    this._revealSuspects();
+    this._showTimerText();
+    this._addClue('🎲 The cards are dealt. Suspects revealed — call it!', VI.HEX.CYAN);
+
     // Folder burn timer — ticks every 250ms
     this._stopTimer();
     this._burnTimer = this.time.addEvent({
       delay: 250, loop: true,
       callback: this._burnTick, callbackScope: this,
     });
-    // Schedule clue reveals
+
+    // Schedule clue reveals (pure flavour — no action cards for now)
     this._scheduleInPhase(VI.PHASE_TIMINGS.CLUE_1_AT_MS, () => this._revealClue(0));
     this._scheduleInPhase(VI.PHASE_TIMINGS.CLUE_2_AT_MS, () => this._revealClue(1));
     this._scheduleInPhase(VI.PHASE_TIMINGS.LAST_CALL_AT_MS, () => {
-      if (this.gs.phase === VI.PHASES.BETTING) {
+      if (this.gs.phase === VI.PHASES.ACCUSE) {
         this._addClue('⏰ LAST CALL — folder almost spent!', VI.HEX.VI_ORANGE);
       }
     });
   }
-  _exit_BETTING() {
+  _exit_ACCUSE() {
     this._stopTimer();
   }
 
@@ -262,8 +283,7 @@ class GameScene extends Phaser.Scene {
     if (this.gs.state !== 'playing') return;
     if (this.gs.round._lockedFolder !== null) {
       // LOCK_IN active: folder integrity still drains visually but the
-      // multiplier used in payout math is frozen. Keep ticking the
-      // timer so the player can't camp forever.
+      // multiplier used in payout math is frozen.
     }
 
     // Burn speed: base + wrong-accusation penalty (3×) + PRESS action (3×)
@@ -271,7 +291,7 @@ class GameScene extends Phaser.Scene {
     const actionMult = this._burnMultiplier || 1;
     const speed     = wrongMult * actionMult;
 
-    const totalSecs = 45;
+    const totalSecs = VI.PHASE_TIMINGS.ACCUSE_TOTAL_MS / 1000;  // GDD: 30s for accuse
     const tickSecs  = 0.25 * speed;
     const floor     = 0.20;
 
@@ -338,11 +358,15 @@ class GameScene extends Phaser.Scene {
 
   _updateTimerText() {
     if (!this._timerText) return;
+    const total   = VI.PHASE_TIMINGS.ACCUSE_TOTAL_MS / 1000;
     const elapsed = this._timerElapsed || 0;
-    const secs    = Math.max(0, Math.round(45 - elapsed));
-    const col     = secs < 10 ? VI.HEX.VI_RED : secs < 20 ? VI.HEX.VI_ORANGE : VI.HEX.CREAM;
+    const secs    = Math.max(0, Math.round(total - elapsed));
+    const col     = secs < 8 ? VI.HEX.VI_RED : secs < 15 ? VI.HEX.VI_ORANGE : VI.HEX.CREAM;
     this._timerText.setText(`${secs}s`).setColor(col);
   }
+
+  _showTimerText() { if (this._timerText) this._timerText.setVisible(true); }
+  _hideTimerText() { if (this._timerText) this._timerText.setVisible(false); }
 
   // ── Folder bar ─────────────────────────────────────────────
 
@@ -442,7 +466,23 @@ class GameScene extends Phaser.Scene {
         this.events.emit('game:suspect_selected', { idx, suspect: sus });
       });
 
+      // Suspects start hidden — they reveal when ACCUSE phase begins.
+      [g, numText, nameText, subtextText].forEach(o => o.setAlpha(0));
+      zone.disableInteractive();
+
       this._suspectSprites.push({ g, numText, nameText, subtextText, highlightG, zone, cx, cy, tokenR, idx, sus });
+    });
+  }
+
+  // Staggered fade-in for ACCUSE phase — "the cards are dealt" moment
+  _revealSuspects() {
+    this._suspectSprites.forEach((s, i) => {
+      this.tweens.add({
+        targets: [s.g, s.numText, s.nameText, s.subtextText],
+        alpha: 1,
+        duration: 400, delay: i * 70, ease: 'Cubic.easeOut',
+      });
+      s.zone.setInteractive({ cursor: 'pointer' });
     });
   }
 
@@ -472,6 +512,119 @@ class GameScene extends Phaser.Scene {
         highlightG.lineStyle(10, VI.COLORS.GOLD, 0.18);
         highlightG.strokeCircle(cx, cy, tokenR + 16);
       }
+    });
+  }
+
+  // ── Case file panel (BETTING phase) ────────────────────────
+  // Big readable panel showing victim + weapon + room + motive.
+  // Built once at scene init (hidden); _showCaseFile / _hideCaseFile
+  // toggle visibility on phase transitions.
+
+  _buildCaseFilePanel() {
+    const cx = Math.round(this.scale.width * 0.40);   // left of the clue feed
+    const cy = 330;
+    const pw = 700, ph = 380;
+
+    const g = this.add.graphics();
+    g.fillStyle(VI.COLORS.PANEL_SURFACE, 0.98);
+    g.fillRoundedRect(cx - pw/2, cy - ph/2, pw, ph, 14);
+    g.lineStyle(8, VI.COLORS.GOLD, 0.12);
+    g.strokeRoundedRect(cx - pw/2, cy - ph/2, pw, ph, 14);
+    g.lineStyle(2, VI.COLORS.GOLD, 0.9);
+    g.strokeRoundedRect(cx - pw/2, cy - ph/2, pw, ph, 14);
+
+    // Header strip
+    const header = this.add.text(cx - pw/2 + 28, cy - ph/2 + 26, 'CASE FILE', {
+      fontFamily: VI.FONTS.HEADING, fontSize: '15px',
+      color: VI.HEX.GOLD, letterSpacing: 6,
+      shadow: { blur: 8, color: VI.HEX.GOLD, fill: true },
+    });
+    const caseNum = this.add.text(cx + pw/2 - 28, cy - ph/2 + 26, '#247', {
+      fontFamily: VI.FONTS.MONO, fontSize: '13px',
+      color: VI.HEX.CYAN, alpha: 0.6,
+    }).setOrigin(1, 0);
+
+    const sep = this.add.graphics();
+    sep.lineStyle(1, VI.COLORS.CYAN, 0.4);
+    sep.lineBetween(cx - pw/2 + 28, cy - ph/2 + 54, cx + pw/2 - 28, cy - ph/2 + 54);
+
+    // "THE LATE" eyebrow
+    const eyebrow = this.add.text(cx, cy - ph/2 + 76, 'THE LATE', {
+      fontFamily: VI.FONTS.MONO, fontSize: '11px',
+      color: VI.HEX.CREAM, alpha: 0.5, letterSpacing: 4,
+    }).setOrigin(0.5);
+
+    // Victim name (the hero)
+    this._cfVictim = this.add.text(cx, cy - ph/2 + 112, '—', {
+      fontFamily: VI.FONTS.HEADING, fontSize: '40px',
+      color: VI.HEX.MAGENTA, letterSpacing: 4,
+      shadow: { blur: 14, color: VI.HEX.MAGENTA, fill: true },
+    }).setOrigin(0.5);
+
+    // Title (italic flavour)
+    this._cfTitle = this.add.text(cx, cy - ph/2 + 150, '—', {
+      fontFamily: VI.FONTS.BODY, fontSize: '14px',
+      color: VI.HEX.CREAM, alpha: 0.7, fontStyle: 'italic',
+    }).setOrigin(0.5);
+
+    // Murder narrative
+    this._cfNarrative = this.add.text(cx, cy + 8, '', {
+      fontFamily: VI.FONTS.BODY, fontSize: '17px',
+      color: VI.HEX.CREAM, align: 'center',
+      lineSpacing: 8, wordWrap: { width: pw - 80 },
+    }).setOrigin(0.5);
+
+    // Motive
+    this._cfMotive = this.add.text(cx, cy + ph/2 - 72, '', {
+      fontFamily: VI.FONTS.MONO, fontSize: '12px',
+      color: VI.HEX.CYAN, letterSpacing: 3,
+    }).setOrigin(0.5);
+
+    // CTA — pulses to draw eye
+    this._cfCTA = this.add.text(cx, cy + ph/2 - 36, '▶  PLACE YOUR BET TO DEAL THE SUSPECTS', {
+      fontFamily: VI.FONTS.HEADING, fontSize: '13px',
+      color: VI.HEX.GOLD, letterSpacing: 4,
+    }).setOrigin(0.5);
+    this.tweens.add({
+      targets: this._cfCTA, alpha: { from: 0.6, to: 1 },
+      duration: 950, yoyo: true, repeat: -1, ease: 'Sine.easeInOut',
+    });
+
+    // Store every element so we can show/hide as a group
+    this._caseFileElements = [g, header, caseNum, sep, eyebrow,
+      this._cfVictim, this._cfTitle, this._cfNarrative, this._cfMotive, this._cfCTA];
+    this._caseFileElements.forEach(e => e.setAlpha(0));
+  }
+
+  _showCaseFile() {
+    const r = this.gs.round;
+    if (!r || !this._caseFileElements) return;
+
+    this._cfVictim.setText(r.victim.victimName.toUpperCase());
+    this._cfTitle.setText(r.victim.title);
+    this._cfNarrative.setText(
+      `Was ${r.victim.deathVerb}\n` +
+      `with ${r.weaponName}\n` +
+      `in ${r.roomName}.`
+    );
+    this._cfMotive.setText(`MOTIVE  ·  ${r.motive.toUpperCase()}`);
+
+    // Staggered fade-in
+    this._caseFileElements.forEach((e, i) => {
+      this.tweens.add({
+        targets: e, alpha: { from: 0, to: 1 },
+        duration: 350, delay: i * 35, ease: 'Cubic.easeOut',
+      });
+    });
+  }
+
+  _hideCaseFile() {
+    if (!this._caseFileElements) return;
+    this._caseFileElements.forEach(e => {
+      this.tweens.add({
+        targets: e, alpha: 0,
+        duration: 220, ease: 'Cubic.easeIn',
+      });
     });
   }
 
@@ -542,16 +695,19 @@ class GameScene extends Phaser.Scene {
   // ── Accusation flow ────────────────────────────────────────
 
   _onBetConfirmed(amt) {
-    // Only accept bets during the open phases
-    const okPhases = [VI.PHASES.BETTING, VI.PHASES.SECOND_CHANCE];
-    if (!okPhases.includes(this.gs.phase)) return;
+    // Bets can only be placed in BETTING (before suspects appear).
+    if (this.gs.phase !== VI.PHASES.BETTING) return;
     this.gs.bet = amt;
-    // Early Bird: bet locked while folder > 60% → +15% bonus at payout
+    // Early Bird: bet locked before folder drops below 60% → +15% at payout.
+    // (Folder is at 100% during BETTING — Early Bird always applies here. We
+    // keep this hook live for compat with any future BETTING-phase folder burn.)
     if (this.gs.round && this.gs.round.registerBetLock) {
       this.gs.round.registerBetLock(this._folderPct);
     }
     const eb = (this._folderPct > 0.60) ? '  ★ EARLY BIRD +15%' : '';
     this._addClue(`💰 Bet placed: $${amt}${eb}`, VI.HEX.VI_AMBER);
+    // Bet locked → "deal the cards" — transition to ACCUSE.
+    this._setPhase(VI.PHASES.ACCUSE);
   }
 
   _onSuspectSelect(idx) {
@@ -565,10 +721,10 @@ class GameScene extends Phaser.Scene {
 
   _onAccuse() {
     const gs = this.gs;
-    // Only allow accusation during BETTING or SECOND_CHANCE
-    if (gs.phase !== VI.PHASES.BETTING && gs.phase !== VI.PHASES.SECOND_CHANCE) return;
+    // Accuse window is the ACCUSE phase (post-bet) or SECOND_CHANCE.
+    if (gs.phase !== VI.PHASES.ACCUSE && gs.phase !== VI.PHASES.SECOND_CHANCE) return;
     if (gs.selectedIdx < 0) { this.events.emit('game:error', 'Select a suspect first!'); return; }
-    if (gs.bet <= 0)         { this.events.emit('game:error', 'Place a bet first!');     return; }
+    if (gs.bet <= 0)        { this.events.emit('game:error', 'No bet placed!');          return; }
 
     // Transition into the appropriate accusation phase
     const targetPhase = (gs.phase === VI.PHASES.SECOND_CHANCE)
@@ -690,8 +846,12 @@ class GameScene extends Phaser.Scene {
   // ── Action cards (GDD v0.4 canonical 8) ────────────────────
   // RoundController is math authority; this is scene-side dispatcher.
   _onActionCard(id) {
-    if (this.gs.phase !== VI.PHASES.BETTING) {
-      this.events.emit('game:error', 'Actions only available during betting');
+    // Action cards are being redesigned — disabled for this milestone.
+    // Keep the handler so any leftover UI references no-op cleanly.
+    return;
+    /* eslint-disable no-unreachable */
+    if (this.gs.phase !== VI.PHASES.ACCUSE) {
+      this.events.emit('game:error', 'Actions only available during the accuse phase');
       return;
     }
     const r = this.gs.round.applyAction(id);

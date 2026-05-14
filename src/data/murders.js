@@ -4,6 +4,9 @@
 
 const MURDER_DATA = {
 
+  // ── SUSPECT ROSTER (pool the lobby picks from to fill chairs) ─
+  // Kept on the field `victims` for legacy compatibility — every existing
+  // reference is actually consuming this as the suspect pool.
   victims: [
     { id: 'butler',    name: 'The Butler',        trait: 'pompous',   color: 0x8866aa },
     { id: 'chef',      name: 'The Chef',           trait: 'chaotic',   color: 0xff6644 },
@@ -13,6 +16,21 @@ const MURDER_DATA = {
     { id: 'mime',      name: 'The Mime',           trait: 'silent',    color: 0xffffff },
     { id: 'duchess',   name: 'The Duchess',        trait: 'dramatic',  color: 0xff44aa },
     { id: 'librarian', name: 'The Librarian',      trait: 'pedantic',  color: 0x44ffcc },
+  ],
+
+  // ── VICTIM ROSTER (dead bodies — pompous duck aristocrats) ──
+  // Each round picks one. Drives the BETTING-phase case file narrative.
+  victimRoster: [
+    { id: 'victor',     name: 'Ducky Victor',         title: 'a notorious rubber tycoon',                       deathVerb: 'mysteriously deflated' },
+    { id: 'quackton',   name: 'Sir Quackton III',     title: 'a knighted opera singer',                         deathVerb: 'spectacularly silenced mid-aria' },
+    { id: 'plumage',    name: 'Madame Plumage',       title: 'the duchess of feathers',                         deathVerb: 'tragically de-fluffed' },
+    { id: 'mallard',    name: 'Captain Mallard',      title: 'a retired pond admiral',                          deathVerb: 'unceremoniously plucked' },
+    { id: 'dabbler',    name: 'Lord Dabbler',         title: 'an eccentric collector of bath toys',             deathVerb: 'permanently un-bathed' },
+    { id: 'webster',    name: 'Webster Pondworth',    title: 'heir to the Pondworth waterway fortune',          deathVerb: 'completely drained' },
+    { id: 'fowler',     name: 'Mrs. Fowler',          title: 'a champion swan impersonator',                    deathVerb: 'tragically unswanned' },
+    { id: 'quackbert',  name: 'Quackbert the Bold',   title: 'the village town crier',                          deathVerb: 'silenced mid-quack' },
+    { id: 'featherly',  name: 'Dame Featherlight',    title: 'prima ballerina of the Royal Webbed Theatre',     deathVerb: 'permanently grounded' },
+    { id: 'bobsworth',  name: 'Baron von Bobsworth',  title: 'a self-made bath-soap industrialist',             deathVerb: 'tragically scrambled' },
   ],
 
   weapons: {

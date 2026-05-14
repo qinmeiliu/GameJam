@@ -35,8 +35,9 @@ class RoundController {
   _generate() {
     const d = MURDER_DATA;
 
-    // Victim
-    const victim     = d.victims[Math.floor(Math.random() * d.victims.length)];
+    // VICTIM — from the dedicated victim roster (pompous duck aristocrats).
+    // Carries narrative flavour (title, deathVerb) for the BETTING-phase case file.
+    const v          = d.victimRoster[Math.floor(Math.random() * d.victimRoster.length)];
 
     // Room
     const room       = d.rooms[Math.floor(Math.random() * d.rooms.length)];
@@ -58,9 +59,9 @@ class RoundController {
     // Motive
     const motive     = d.motives[Math.floor(Math.random() * d.motives.length)];
 
-    // Suspects (exclude victim)
-    const pool       = d.victims.filter(v => v.id !== victim.id);
-    const shuffled   = this._shuffle([...pool]).slice(0, this.suspectCount);
+    // SUSPECTS — from the suspect roster (kept as `victims` for legacy reasons).
+    // Pool is independent of the victim now, so any character can be a suspect.
+    const shuffled   = this._shuffle([...d.victims]).slice(0, this.suspectCount);
     this.killerIdx   = Math.floor(Math.random() * shuffled.length);
 
     this.suspects = shuffled.map((s, i) => {
@@ -78,7 +79,12 @@ class RoundController {
       };
     });
 
-    this.victim      = { victimName: victim.name, trait: victim.trait };
+    this.victim      = {
+      id:         v.id,
+      victimName: v.name,
+      title:      v.title,
+      deathVerb:  v.deathVerb,
+    };
     this.weaponName  = weaponName;
     this.weaponTier  = weaponTier;
     this.roomName    = room.name;

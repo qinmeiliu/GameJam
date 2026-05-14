@@ -19,7 +19,7 @@
 ## CORE DESIGN PILLARS
 
 1. **30/70 Chaos** — the murder is not solvable. Clues are nonsense. Trust scores are cosmetic. Killer is pure equal-weight RNG. House edge ~20% held constant across suspect counts via `payout = suspectCount × 0.8`.
-2. **Clue Phase = Betting Strategy** — clues unlock blackjack-style action cards (Double Down, Insurance, Split, Cash Out, Press, Chaos Roll, Lock In, Side Swap). One action per clue reveal, 8s window.
+2. **Two-sub-phase betting** — BETTING phase shows the case file (open-ended, no timer); player places bet → ACCUSE phase (30s timed): suspects revealed with quotes, folder burns, player must accuse. Action cards exist in code but are temporarily removed from the UI pending redesign.
 3. **Dual Accusation** — wrong Accusation #1 → innocent dramatically executed, pool drops to 40%, folder burns 3× faster, Accusation #2 window opens (15s). Two-strikes-out.
 4. **Glow-Fi Neo-Vector art** — Flood Black base (`#05050a`), Cyan/Magenta/Gold accents, dot-matrix Linear GFX, Hex Holding Devices, every element glows.
 

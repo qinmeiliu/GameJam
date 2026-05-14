@@ -147,4 +147,38 @@ const MURDER_DATA = {
     { object: 'a signed photograph of nobody', duckyDoes: 'looks confused, keeps it',        action: 'INSURANCE',    label: '🛡 INSURANCE',       desc: 'Pay +20%. Get 50% back on a loss.' },
   ],
 
+  // ──────────────────────────────────────────────────────────
+  //  CLUE TEMPLATES (v0.5) — no killer-name spoilers
+  //
+  //  Round-time substitution variables (RoundController binds them):
+  //    {object}      — flavor object pulled from clueEvents pool
+  //    {killerTrait} — the actual killer's `trait` field (8 traits in pool)
+  //    {randomTrait} — a trait pulled from a random non-killer suspect
+  //    {weapon}      — current round's weapon
+  //    {motive}      — current round's motive
+  //
+  //  Tier mix (4/4/4): reliable hints, misleading hints, pure flavor.
+  //  Round picks 2 templates at random — player has no way to tell signal
+  //  from noise before buying.
+  // ──────────────────────────────────────────────────────────
+  clueTemplates: [
+    // ── Reliable (4): hint at killer's actual trait ────────
+    { tier: 'reliable',   text: 'Ducky found {object}. The killer reeks of {killerTrait} energy.' },
+    { tier: 'reliable',   text: 'Ducky discovered {object} near the {weapon}. Whoever swung it was unmistakably {killerTrait}.' },
+    { tier: 'reliable',   text: "The body's posture screams {killerTrait}. Ducky takes notes, suspiciously." },
+    { tier: 'reliable',   text: 'Ducky inspects {object}. The killer left a fingerprint of {killerTrait} energy on it.' },
+
+    // ── Misleading (4): hint at a random NON-killer trait ──
+    { tier: 'misleading', text: 'Ducky pegs the killer as someone {randomTrait}, possibly. Or maybe not.' },
+    { tier: 'misleading', text: 'Whoever did this had {randomTrait} vibes — or so the napkins say.' },
+    { tier: 'misleading', text: "Ducky overheard a whisper: '{randomTrait} types are always the worst.'" },
+    { tier: 'misleading', text: 'The crime scene smells faintly of {randomTrait} ambition. Or gravy. Hard to tell.' },
+
+    // ── Flavor (4): no info value, pure chaos ──────────────
+    { tier: 'flavor',     text: 'Ducky found {object}. Quack. That is the entire clue.' },
+    { tier: 'flavor',     text: 'Ducky discovered {object}. The motive — {motive} — feels personal.' },
+    { tier: 'flavor',     text: 'Ducky noticed the {weapon} was held clumsily. Typical for murderers.' },
+    { tier: 'flavor',     text: 'A second {object} appeared, identical to the first. Ducky is unsettled.' },
+  ],
+
 };

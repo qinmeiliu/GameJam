@@ -1,8 +1,24 @@
-# 🦆 THE DUCKY DETECTIVE AGENCY
-## Game Design Document v0.4 — Vegas Infinite Game Jam
-### Revised: Dual Accusation · Mansion Rooms · Multiplayer · 30/70 Chaos · Confirmed Payout Math · Brand Bible Art Audit
+# 🦆 QUACKDUNNIT (formerly The Ducky Detective Agency)
+## Game Design Document v0.5 — Vegas Infinite Game Jam
+### Casino Redesign: Clue Market · Non-Linear Risk Curve · Tightened RTP · No-Clue Bonus
 
 > *"Every crime has a culprit. Every clue is nonsense. Every bet is faith."*
+
+---
+
+## v0.5 CHANGELOG — Casino Redesign (2026-05-14)
+
+The clue system and payout math were re-tuned to feel like a real casino game rather than a guess-the-killer puzzle. The big shifts:
+
+1. **Clues no longer name the killer.** Old text had `"${killerName}" scrawled faintly underneath` — a hard spoiler. New text uses trait-based hints, misdirection, and pure flavor with no name reveals.
+2. **Clues are a market, not auto-revealed.** Two locked clue cards appear in the right-side panel during ACCUSE. The player chooses to buy 0, 1, or 2 of them.
+3. **Asymmetric clue costs.** First clue purchased = 10% of bet, second clue purchased = 20% of bet. Order-based, not slot-based.
+4. **No-Clue Bonus.** If the player buys zero clues, gross payout is multiplied by ×1.20. This rewards the cool-headed pure-RNG player.
+5. **Non-linear suspect multipliers** (intentionally breaks constant RTP). Higher suspect count = better RTP, lower win frequency — a real risk gradient.
+6. **Accusation #2 penalty tightened** from ×0.40 to ×0.30.
+7. **8-action card system deferred.** DOUBLE DOWN / INSURANCE / SPLIT / CASH OUT / PRESS / CHAOS ROLL / LOCK IN / SIDE SWAP are now post-MVP. The clue market replaces them as the primary "casino move" loop.
+
+The full math, mechanics, and balance reasoning live in the sections below.
 
 ---
 
@@ -12,37 +28,67 @@ This is a **30/70 chaos casino game**. The murder is not solvable. The clues are
 
 ---
 
-## SUSPECT COUNT & RTP FRAMEWORK
+## SUSPECT COUNT & RTP FRAMEWORK (v0.5)
 
-### The Scaling System
-The number of suspects scales the risk and payout. Players choose their suspect count at the start of a round (like choosing a blackjack table stake).
+### The Scaling System — Non-Linear Risk Curve
+The number of suspects is now a **risk-reward dial**, not a constant-RTP one. Players choose a suspect count at the start of a round (like choosing slot machine volatility). Higher suspect count = lower win frequency, bigger payout, slightly better RTP.
 
-| Suspects | Base Win Chance | First Accusation Payout | House Edge |
-|---|---|---|---|
-| 3 suspects | 33.3% | 2.4× | ~20% |
-| 4 suspects | 25.0% | 3.2× | ~20% |
-| 5 suspects | 20.0% | 4.0× | ~20% |
-| 6 suspects | 16.7% | 4.8× | ~20% |
+| Suspects | suspMult | P(Acc#1 correct) | Win freq (Acc#1+Acc#2) | RTP no-clue | RTP 1 clue | RTP 2 clues |
+|---|---|---|---|---|---|---|
+| 3 | **1.8×** | 33.3% | 67% | 90% | 65% | 45% |
+| 4 | **2.5×** | 25.0% | 50% | 94% | 68% | 48% |
+| 5 | **3.2×** | 20.0% | 40% | 96% | 70% | 50% |
+| 6 | **4.0×** | 16.7% | 33% | 100% | 73% | 53% |
 
-House edge is held constant at ~20% across all suspect counts by maintaining the ratio: `payout = (suspects × 0.8)`.
+**Design intent:**
+- 3-suspect play is **comfort food** — frequent small wins, slightly worse RTP, lowest variance.
+- 6-suspect play is the **high-roller chase** — rare wins, the biggest payouts, the best RTP (essentially fair at 100%).
+- Constant RTP across suspect counts was the v0.3 design goal. v0.5 *intentionally breaks it* to give players a meaningful axis of choice.
 
-### Confirmed Payout Formula (v0.3 — matches RoundController.js)
+### Confirmed Payout Formula (v0.5 — matches RoundController.js)
 
 ```
 GROSS PAYOUT =
   bet_amount
-  × suspect_multiplier      (suspectCount × 0.8)
-  × folder_multiplier       (see Burn section below)
+  × suspect_multiplier      (1.8 / 2.5 / 3.2 / 4.0 for 3/4/5/6 suspects — see table above)
+  × folder_multiplier       (lerp 0.2× → 1.5× over 20→100% integrity)
   × weapon_multiplier       (1.0 / 1.5 / 3.0 for common/uncommon/rare)
   × (1 + early_bird_bonus)  (+0.15 if bet placed while folder integrity > 60%)
-  × action_modifiers        (see Clue Actions table)
+  × no_clue_bonus           (×1.20 if cluesPurchased === 0, else ×1.00)
+  × action_modifiers        (post-MVP: DD/CHAOS/etc. — currently 1.00)
 
-ACCUSATION #2 PENALTY: gross payout × 0.40
+ACCUSATION #2 PENALTY: gross payout × 0.30   (down from v0.4's 0.40)
 
-NET GAIN = gross_payout − bet_amount
+NET GAIN = gross_payout − bet_amount − clue_costs_already_paid
 ```
 
-### Clue Action Modifiers (confirmed)
+**Clue costs** are deducted from the player's balance **at click time**, not subtracted from gross at payout. If the player loses, the clue cost is also gone (information has a price, win or lose).
+
+### Clue Costs (v0.5)
+
+| Clue order | Cost | Rationale |
+|---|---|---|
+| First clue purchased | 10% of bet | "Curiosity tax" — affordable peek |
+| Second clue purchased | 20% of bet | "Commitment tax" — paying double for full info |
+
+The cost is determined by **order of purchase, not slot**. Whichever clue button the player clicks first costs 10%; the other costs 20% if also bought. Total cost for both = 30% of bet.
+
+### No-Clue Bonus
+
+- Active iff `cluesPurchased === 0` at the moment of payout
+- Applies ×1.20 to gross payout (visible as a `NO-CLUE BONUS  ×1.20` indicator during ACCUSE)
+- Lost the instant any clue is purchased — even if that clue ends up being wrong/misleading
+- **Survives both accusations.** If the player buys zero clues and wins on Acc#2, they still get the bonus (then the ×0.30 Acc#2 penalty stacks on top)
+
+### Why this passes the casino-game sniff test
+
+- **No-clue path** has RTPs from 90% (3 suspects) to 100% (6 suspects) — comparable to real-world slots (85–96%) and blackjack with basic strategy (~99%).
+- **Clue-buying path** drops to 45–73% RTP — comparable to keno or casino war (i.e., a sucker bet).
+- The mathematically optimal strategy (skip clues, play 6 suspects) is also the **least informed** play. This is intentional casino design: rewards pure faith, taxes paranoia.
+
+### Deferred — Action Cards (post-MVP)
+
+The original v0.4 8-action card system (DOUBLE DOWN, INSURANCE, SPLIT, CASH OUT, PRESS, CHAOS ROLL, LOCK IN, SIDE SWAP) is **temporarily removed from the UI** while the clue market becomes the primary "casino move" loop. The math hooks remain in `RoundController.applyAction()` for re-integration once we figure out how action cards co-exist with the clue market. Reference design preserved below:
 
 | Action | Math Effect | Cost |
 |---|---|---|
@@ -55,28 +101,36 @@ NET GAIN = gross_payout − bet_amount
 | LOCK IN | Freezes folder_multiplier at current value | No extra cost |
 | SIDE SWAP | Moves 50% of bet to a different suspect | No extra cost |
 
-### The Dual Accusation System
+### The Dual Accusation System (v0.5)
 Inspired by *Who's the Murderer* (芒果TV). Players get **two chances** to accuse per round. The system maps directly to blackjack logic:
 
 ```
-ACCUSATION #1 (full betting window, pre-evidence burn end):
+ACCUSATION #1 (open betting window, ends on bet confirm):
   ├── CORRECT → Full payout × current multiplier
-  │              + Perfect Detective Bonus: +15% if folder >60% integrity
+  │              + Perfect Detective Bonus: +15% if folder >60% integrity at bet lock
   └── WRONG  → "WRONG SUSPECT EXECUTED" 💀
                Innocent is dramatically killed (physics ragdoll, comedic)
-               Prize pool DROPS to 40% of current value
-               Second accusation window opens (reduced stakes)
-               This is the SURRENDER equivalent — partial recovery possible
+               Wrong suspect dimmed + de-interacted
+               Second accusation window opens (15s hard cap, no clue purchases)
 
 ACCUSATION #2 (available only after Accusation #1 fails):
-  ├── CORRECT → 40% of original potential payout
+  ├── CORRECT → 30% of full gross payout  (v0.5: reduced from 40% to tighten RTP)
+  │              No-clue bonus still stacks if clues were skipped
   └── WRONG  → Full loss. Ducky shakes head slowly. Case closed.
 
-BOTH CORRECT (special bonus path):
+BOTH CORRECT (special bonus path, post-MVP):
   → Accusation #1 correct + player voluntarily confirms again = 
     "DOUBLE DETECTIVE" bonus: 1.5× on top of base payout
-  → This incentivises confident players to "press their luck" on a confirm
+  → Deferred — not in v0.5 build
 ```
+
+### Clue Market × Dual Accusation Interaction
+
+- The Clue Market is **ACCUSE-phase only**. Locks the moment the player submits Acc#1.
+- **Already-purchased clues remain visible** through SECOND_CHANCE and into the scoreboard.
+- **Unpurchased clue cards** during SECOND_CHANCE show `🔒 INFORMATION CLOSED` — no late buys.
+- **The No-Clue Bonus survives both accusations.** If the player skipped clues and wins on Acc#2: gross × 1.20 × 0.30.
+- **Clue cost is non-refundable.** Even if Acc#2 fails completely, the clue purchase price is gone — that was the price of seeing the information.
 
 ### Why the Pool Drop Works Better Than Surrender
 In blackjack, surrender is invisible — you just lose 50% and leave. Here, the pool drop is **theatrical**:
@@ -125,34 +179,81 @@ The game is set in **Rubberduck Manor**, a ludicrously overdecorated Victorian m
 
 ---
 
-## THE CLUE PHASE — REDESIGNED AS BETTING STRATEGY (v0.2)
+## THE CLUE MARKET — v0.5 REDESIGN
 
 ### Conceptual Shift
-Clues no longer affect logic. They are **betting action triggers** — exactly like being offered Double Down, Split, or Insurance in blackjack. When Ducky reveals a "clue", it's an absurd nonsensical object paired with a betting option. Players who engage with clue actions can amplify or protect their position.
+v0.4's clues had two problems: they spoiled the killer by name, and they auto-revealed (no player agency). v0.5 reframes clues as a **casino market** — pure theatre, optional purchase, mathematically a tax on certainty.
 
-The clues themselves are deliberately, hilariously unhelpful. They don't point at suspects. They are pure chaos flavour.
+- Clues never name the killer.
+- Players choose to buy 0, 1, or 2 clues during ACCUSE.
+- Buying clues costs upfront chips; skipping them earns a +20% gross bonus.
+- The casino-optimal play is to **skip all clues**. Buying them is a "fun tax" the gambler pays for the illusion of investigation.
 
-### Absurd Clue Examples (no logical connection to the case)
+### Clue Text Templates (12 total, no killer-name spoilers)
 
-| Clue Object Found | Ducky's Reaction | Betting Action Unlocked |
-|---|---|---|
-| A half-eaten crumpet | Ducky eats the evidence. Quack. | **DOUBLE DOWN**: Double your current bet at locked odds |
-| A goldfish in a top hat | Ducky salutes the goldfish | **INSURANCE**: Pay 20% of bet. If you lose, get 50% back |
-| A sticky note reading "NOT ME" | Ducky squints at camera | **SPLIT**: Divide bet evenly across 2 suspects |
-| A rubber duck (smaller than Ducky) | Ducky is disturbed | **CASH OUT**: Accept 0.65× payout NOW, before reveal |
-| Someone's shopping list | Ducky reads it, tears up | **PRESS**: Keep bet, but folder burns 10% faster |
-| A live pigeon | Chaos. Just chaos. | **CHAOS ROLL**: Random 0.5× to 3× applied to your bet |
-| A single Lego brick | Ducky steps on it. Full reaction | **LOCK IN**: Freeze your multiplier at current value |
-| A trombone | Ducky attempts to play it | **SIDE SWAP**: Move 50% of bet to a different suspect, no penalty |
+Each round, RoundController picks 2 templates randomly. The pool is intentionally split between **reliable, misleading, and pure flavor** so the player has no way to know in advance whether a clue is signal or noise.
 
-### How It Plays
-At each clue reveal (0:08 and 0:30), a **betting action card** slides up for 8 seconds:
-- Big graphic, clear name, clear odds
-- Player taps/clicks to activate or ignores it
-- Each action costs nothing to ignore — it just expires
-- A player can use **one action per clue reveal** maximum
+**Reliable (4 templates) — hint at the killer's actual trait:**
+- "Ducky found {object}. The killer reeks of {killerTrait}."
+- "Ducky discovered {object} near the {weapon}. Whoever swung it was {killerTrait}."
+- "The body's posture suggests someone {killerTrait}. Ducky takes notes."
+- "Ducky inspects {object}. The killer left a fingerprint of {killerTrait} energy."
 
-This makes the clue phase feel like: *"Oh! Ducky found a goldfish. Do I take insurance or double down?"* — not *"Hmm, what does this clue tell me about the Chef?"*
+**Misleading (4 templates) — hint at a random NON-killer trait:**
+- "Ducky pegs the killer as someone {randomTrait}, possibly."
+- "Whoever did this had {randomTrait} vibes. Or so the napkins say."
+- "Ducky overheard a whisper: '{randomTrait} types are the worst.'"
+- "The crime scene smells faintly of {randomTrait} ambition."
+
+**Pure flavor (4 templates) — zero info value, pure chaos:**
+- "Ducky found {object}. Quack."
+- "Ducky discovered {object}. The motive — {motive} — feels personal."
+- "Ducky noticed the {weapon} was held clumsily — typical for murderers."
+- "A second {object} appeared, identical to the first. Ducky is unsettled."
+
+**Variables:**
+- `{killerTrait}` — the actual killer's `trait` field (e.g., 'pompous', 'chaotic', 'cowardly', 'cryptic', 'eccentric', 'silent', 'dramatic', 'pedantic')
+- `{randomTrait}` — a trait picked from a random non-killer suspect
+- `{object}` — funny flavor object from the existing `clueEvents` pool
+- `{weapon}` / `{motive}` — pulled from the round
+
+### Clue Market Mechanics
+
+```
+At ACCUSE phase start:
+  ├── 2 locked clue cards appear on the right-side panel
+  ├── Each shows: "🔒 CLUE #N · BUY • $cost"
+  ├── A "NO-CLUE BONUS  ×1.20" indicator pulses above them
+  └── Clue feed (game messages) sits below the market
+
+On click of a clue card:
+  ├── If first purchase: cost = 10% of bet
+  │   Deduct from balance immediately
+  │   Card unlocks, clue text fades in
+  │   No-clue bonus indicator turns gray with strikethrough
+  ├── If second purchase: cost = 20% of bet
+  │   Deduct from balance immediately
+  │   Card unlocks
+  └── Both clues now visible
+
+On SECOND_CHANCE phase entry:
+  └── Market locked
+      Bought clues stay visible
+      Unbought show "🔒 INFORMATION CLOSED"
+
+On SCOREBOARD:
+  └── Multiplier breakdown shows: no-clue bonus (if applied), clue costs (if paid)
+```
+
+### Why This Design
+
+The casino-savvy player **skips clues, plays max suspects (6), accepts that 67% of rounds end as a loss, lives for the 33% wins that pay 4× minimum**. Highest RTP.
+
+The investigator **buys both clues every round, pays 30% of bet for misleading information**. Lowest RTP — pays a 30% "anxiety tax" on top of the lost no-clue bonus.
+
+The hedger **buys one clue to "check their gut" if they're unsure**. Splits the difference.
+
+All three player archetypes are valid. The clue market is the *expression* of player psychology — paranoia vs faith.
 
 ---
 
@@ -367,15 +468,18 @@ Firebase Security Rules prevent reading `actualKiller` before state = "reveal":
 
 ---
 
-## ✅ CONFIRMED DECISIONS (v0.3)
+## ✅ CONFIRMED DECISIONS (v0.5)
 
 | Decision | Choice | Notes |
 |---|---|---|
 | Multiplayer payout model | **Individual payouts** | Standard casino model. Each player bets own chips, wins/loses independently. No shared pot. |
 | Logic vs RNG split | **30/70 chaos** | Clues are nonsensical misdirection. Killer is pure equal-weight RNG. Trust Scores are cosmetic noise. |
-| Accusation system | **Dual accusation** | Inspired by 芒果TV *Who's the Murderer*. Wrong Acc. #1 → innocent executed → 40% payout cap on Acc. #2. |
-| Clue phase design | **Betting strategy** | Each clue unlocks one blackjack-style action card (8s window). Not detective logic. |
-| Suspect scaling | **3–6 suspects, player's choice** | Payout = suspectCount × 0.8. House edge ~20% at all levels. |
+| Accusation system | **Dual accusation** | Inspired by 芒果TV *Who's the Murderer*. Wrong Acc. #1 → innocent executed → 30% payout cap on Acc. #2 (v0.5 — was 40%). |
+| Clue phase design | **Clue Market** (v0.5) | Player buys clues during ACCUSE: 10% bet for first, 20% for second. No-clue play earns ×1.20 bonus. Clue text never names the killer. |
+| Suspect scaling | **3–6 suspects, non-linear** (v0.5) | Multipliers: 1.8 / 2.5 / 3.2 / 4.0. Higher suspect count = better RTP, lower win frequency. Variance dial. |
+| RTP range (no-clue play) | **90% (3 suspects) → 100% (6 suspects)** | Comparable to slots / blackjack. With clue purchases, RTP drops to 45–73%. |
+| Bet deduction timing | **Immediate, on confirm** | Chips leave the bankroll the moment CONFIRM BET fires. Clue purchases also deduct immediately. |
+| Action cards | **Deferred** (post-MVP) | The 8 original action cards (DOUBLE DOWN etc.) are removed from the UI in v0.5 while the clue market becomes the primary "casino move" loop. Math hooks remain in code. |
 | Multiplayer backend | **Firebase Realtime DB** | Free tier, static-compatible, no server needed. Single player = 1-player room, no lobby wait. |
 | Starting balance | **1,000 chips** | Per player, per session. |
 

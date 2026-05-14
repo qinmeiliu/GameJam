@@ -232,19 +232,21 @@ class MenuScene extends Phaser.Scene {
     }).setOrigin(0.5).setDepth(102);
 
     const body = [
-      '1.  PICK YOUR ROOM.  Choose 3–6 suspects. More suspects = bigger payout, worse odds.',
+      '1.  CHOOSE YOUR TABLE.  3–6 suspects. More suspects → bigger payouts, lower win',
+      '     frequency, and slightly better RTP. Pick your volatility.',
       '',
-      '2.  PLACE YOUR BET.  Stack chips, lock in a suspect. Bet early (folder > 60%)',
-      '     for the +15% EARLY BIRD bonus.',
+      '2.  PLACE YOUR BET.  Stack chips, hit CONFIRM. Bet locks while the folder is',
+      '     fresh for the +15% EARLY BIRD bonus.',
       '',
-      '3.  PLAY ACTION CARDS.  As the folder burns, use blackjack-style moves:',
-      '     DOUBLE DOWN, INSURANCE, CASH OUT, CHAOS ROLL, LOCK IN, SIDE SWAP, PRESS, SPLIT.',
+      '3.  THE CLUE MARKET.  Two clues offered during ACCUSE. First clue costs 10% of',
+      '     your bet; second costs 20%. Skip BOTH for the +20% NO-CLUE BONUS. Clues',
+      '     can mislead — sometimes they hint at the killer, sometimes at someone else.',
       '',
-      '4.  ACCUSE.  Wrong on Acc #1 → SECOND CHANCE: 15 seconds, folder burns 3× faster,',
-      '     payouts capped at 40%. Wrong twice = COLD CASE.',
+      '4.  ACCUSE.  Wrong on Acc #1 → SECOND CHANCE: 15s, folder burns 3× faster,',
+      '     no new clue purchases, payout capped at 30%. Wrong twice = COLD CASE.',
       '',
-      '5.  THE TWIST.  The killer is pure RNG. Clues are nonsense. Trust scores are theatre.',
-      '     You are a gambler dressed as a detective.',
+      '5.  THE TWIST.  The killer is pure RNG. Clues are theatre. You are a gambler',
+      '     dressed as a detective. The smartest play is to skip the clues entirely.',
     ].join('\n');
 
     const text = this.add.text(cx, cy + 4, body, {

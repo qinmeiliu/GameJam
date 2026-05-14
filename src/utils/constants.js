@@ -95,6 +95,20 @@ const VI = {
     CHIP_DENOMINATIONS: [1, 5, 25, 100, 500],
     DEFAULT_BALANCE: 1000,
 
+    // ── v0.5 Casino math (see GDD v0.5 CHANGELOG) ─────────────
+    // Non-linear suspect multipliers — index by suspectCount (3..6).
+    // Slots 0–2 unused. Breaks v0.3's constant-RTP property on purpose:
+    // higher suspect count = better RTP, lower win frequency.
+    SUSPECT_MULTS: [0, 0, 0, 1.8, 2.5, 3.2, 4.0],
+    // Acc#2 payout cap — was 0.40 in v0.4, tightened in v0.5.
+    ACC2_PENALTY:           0.30,
+    // No-clue bonus multiplier applied to gross iff cluesPurchased === 0.
+    NO_CLUE_BONUS_MULT:     1.20,
+    // Order-based clue cost fractions (of bet). First clue cheap; second expensive.
+    CLUE_COST_FIRST_FRAC:   0.10,
+    CLUE_COST_SECOND_FRAC:  0.20,
+    EARLY_BIRD_BONUS:       0.15,    // applied when bet locks while folder > 60%
+
     // Dot matrix background settings (Linear GFX — Brand Bible toolkit)
     DOT_SPACING:  28,    // px between dots
     DOT_RADIUS:   1.5,   // px dot size

@@ -50,7 +50,8 @@ class GameScene extends Phaser.Scene {
     // Suspect display area
     this._buildSuspectArea();
 
-    // Clue feed area
+    // Right panel — top half = Clue Market (v0.5), bottom half = game log
+    this._buildClueMarket();
     this._buildClueFeed();
 
     // Big case file panel (shown during BETTING phase only)
@@ -127,6 +128,7 @@ class GameScene extends Phaser.Scene {
     this._refreshSuspects();
     this._refreshFolderBar();
     this._clearClueFeed();
+    this._resetClueMarket();          // reset clue cards + no-clue bonus indicator
 
     // Emit round start to UIScene
     this.events.emit('game:round_start', {
@@ -234,7 +236,13 @@ class GameScene extends Phaser.Scene {
     this._timerElapsed = 0;
     this._timerExpired = false;
     this._updateTimerText();
-    this._addClue('🎲 The cards are dealt. Suspects revealed — call it!', VI.HEX.CYAN);
+    this._addClue('🎲 The cards are dealt. Buy clues, or stay clueless for +20%.', VI.HEX.CYAN);
+
+    // Open the Clue Market (top half of right panel)
+    this._setClueMarketVisible(true);
+    this._refreshClueCard(0);
+    this._refreshClueCard(1);
+    this._updateNoClueBonusIndicator();
 
     // Folder burn timer — ticks every 250ms
     this._stopTimer();
@@ -243,9 +251,8 @@ class GameScene extends Phaser.Scene {
       callback: this._burnTick, callbackScope: this,
     });
 
-    // Schedule clue reveals (pure flavour — no action cards for now)
-    this._scheduleInPhase(VI.PHASE_TIMINGS.CLUE_1_AT_MS, () => this._revealClue(0));
-    this._scheduleInPhase(VI.PHASE_TIMINGS.CLUE_2_AT_MS, () => this._revealClue(1));
+    // v0.5: clues no longer auto-reveal. They're purchase-on-demand via the
+    // Clue Market. We just keep the Last Call alert as a soft timer warning.
     this._scheduleInPhase(VI.PHASE_TIMINGS.LAST_CALL_AT_MS, () => {
       if (this.gs.phase === VI.PHASES.ACCUSE) {
         this._addClue('⏰ LAST CALL — folder almost spent!', VI.HEX.VI_ORANGE);
@@ -286,6 +293,10 @@ class GameScene extends Phaser.Scene {
     }
     this._addClue(`❌ WRONG! ${gs.round.suspects[wrongIdx].name} is innocent.`, VI.HEX.MAGENTA);
     this._addClue('🎲 SECOND CHANCE — folder burns 3× faster, 15s left!', VI.HEX.VI_ORANGE);
+    this._addClue('🔒 Clue Market closed. Trust your gut.', VI.HEX.CYAN);
+
+    // v0.5: clue market freezes — no late buys, purchased clues stay visible
+    this._freezeClueMarket();
 
     gs.selectedIdx = -1;
     this._refreshSuspectHighlights();
@@ -897,12 +908,15 @@ class GameScene extends Phaser.Scene {
     });
   }
 
-  // ── Clue feed ──────────────────────────────────────────────
+  // ── Game-log feed (bottom half of right panel, v0.5) ───────
+  // The old "clue feed" is now just a running game-message log. The
+  // top half of the right panel hosts the v0.5 Clue Market built by
+  // _buildClueMarket below.
 
   _buildClueFeed() {
-    const { width, height } = this.scale;
-    const fx = Math.round(width * 0.64), fy = 100;
-    const fw = width - fx - 16, fh = height - fy - 90;
+    const { width } = this.scale;
+    const fx = Math.round(width * 0.64), fy = 370;       // moved down — top half is Clue Market
+    const fw = width - fx - 16, fh = 260;
 
     const bg = this.add.graphics();
     bg.fillStyle(VI.COLORS.PANEL_SURFACE, 0.75);
@@ -910,7 +924,7 @@ class GameScene extends Phaser.Scene {
     bg.lineStyle(1, VI.COLORS.CYAN, 0.18);
     bg.strokeRoundedRect(fx, fy, fw, fh, 8);
 
-    this.add.text(fx + fw / 2, fy + 16, 'CLUE FEED', {
+    this.add.text(fx + fw / 2, fy + 16, 'GAME LOG', {
       fontFamily: VI.FONTS.HEADING, fontSize: '12px',
       color: VI.HEX.CYAN, letterSpacing: 6,
     }).setOrigin(0.5);
@@ -924,6 +938,202 @@ class GameScene extends Phaser.Scene {
     this._clueFeedW = fw - 24;
     this._clueTexts = [];
     this._clueY     = this._clueFeedY;
+  }
+
+  // ── Clue Market (top half of right panel, v0.5) ────────────
+  // Two purchaseable clue cards + a No-Clue Bonus indicator. Player
+  // buys 0-2 clues during ACCUSE. Market freezes on SECOND_CHANCE
+  // entry. State is driven by the RoundController.clues array and
+  // RoundController.cluesPurchased counter.
+
+  _buildClueMarket() {
+    const { width } = this.scale;
+    const fx = Math.round(width * 0.64), fy = 100;
+    const fw = width - fx - 16, fh = 260;
+
+    const bg = this.add.graphics();
+    bg.fillStyle(VI.COLORS.PANEL_SURFACE, 0.75);
+    bg.fillRoundedRect(fx, fy, fw, fh, 8);
+    bg.lineStyle(1, VI.COLORS.GOLD, 0.30);
+    bg.strokeRoundedRect(fx, fy, fw, fh, 8);
+
+    this.add.text(fx + fw / 2, fy + 16, 'CLUE MARKET', {
+      fontFamily: VI.FONTS.HEADING, fontSize: '13px',
+      color: VI.HEX.GOLD, letterSpacing: 6,
+      shadow: { blur: 8, color: VI.HEX.GOLD, fill: true },
+    }).setOrigin(0.5);
+
+    // No-Clue Bonus indicator (pulses while active; greyed once any clue bought)
+    this._noClueBonusLbl = this.add.text(fx + fw / 2, fy + 40, '✨  NO-CLUE BONUS  ×1.20', {
+      fontFamily: VI.FONTS.HEADING, fontSize: '11px',
+      color: VI.HEX.GOLD, letterSpacing: 4,
+    }).setOrigin(0.5);
+    this._noClueBonusPulse = this.tweens.add({
+      targets: this._noClueBonusLbl,
+      alpha: { from: 0.55, to: 1 },
+      duration: 900, yoyo: true, repeat: -1, ease: 'Sine.easeInOut',
+    });
+
+    const sep = this.add.graphics();
+    sep.lineStyle(1, VI.COLORS.GOLD, 0.20);
+    sep.lineBetween(fx + 10, fy + 56, fx + fw - 10, fy + 56);
+
+    // Two stacked cards
+    this._clueCards = [
+      this._buildClueCard(0, fx + 10, fy + 68,  fw - 20, 88),
+      this._buildClueCard(1, fx + 10, fy + 162, fw - 20, 88),
+    ];
+    this._clueMarketFrozen = false;
+    this._setClueMarketVisible(false);   // hidden until ACCUSE
+  }
+
+  _buildClueCard(idx, x, y, w, h) {
+    const bg = this.add.graphics();
+    bg.fillStyle(VI.COLORS.FLOOD_BLACK, 0.6);
+    bg.fillRoundedRect(x, y, w, h, 6);
+    bg.lineStyle(1, VI.COLORS.CYAN, 0.40);
+    bg.strokeRoundedRect(x, y, w, h, 6);
+
+    const headerLbl = this.add.text(x + 12, y + 10, `🔒 CLUE #${idx + 1}`, {
+      fontFamily: VI.FONTS.HEADING, fontSize: '12px',
+      color: VI.HEX.CYAN, letterSpacing: 4,
+    });
+
+    // BUY button (top-right of card)
+    const btnW = 110, btnH = 30;
+    const btnX = x + w - 14 - btnW;
+    const btnY = y + 10;
+    const btnG = this.add.graphics();
+    const btnLbl = this.add.text(btnX + btnW/2, btnY + btnH/2, 'BUY  $—', {
+      fontFamily: VI.FONTS.HEADING, fontSize: '12px',
+      color: VI.HEX.GOLD, letterSpacing: 3,
+    }).setOrigin(0.5);
+    const drawBtn = (hover) => {
+      btnG.clear();
+      btnG.fillStyle(hover ? VI.COLORS.MAGENTA : VI.COLORS.VI_PURPLE, 1);
+      btnG.fillRoundedRect(btnX, btnY, btnW, btnH, 5);
+      btnG.lineStyle(1, VI.COLORS.GOLD, hover ? 1 : 0.7);
+      btnG.strokeRoundedRect(btnX, btnY, btnW, btnH, 5);
+    };
+    drawBtn(false);
+
+    const btnZone = this.add.zone(btnX + btnW/2, btnY + btnH/2, btnW, btnH).setInteractive({ cursor: 'pointer' });
+    btnZone.on('pointerover', () => drawBtn(true));
+    btnZone.on('pointerout',  () => drawBtn(false));
+    btnZone.on('pointerup',   () => this._tryBuyClue(idx));
+
+    // Clue text — hidden until card is bought
+    const clueText = this.add.text(x + 12, y + 46, '', {
+      fontFamily: VI.FONTS.BODY, fontSize: '12px',
+      color: VI.HEX.CREAM, alpha: 0.92, fontStyle: 'italic',
+      wordWrap: { width: w - 24 }, lineSpacing: 2,
+    });
+
+    return { idx, bg, headerLbl, btnG, btnLbl, btnZone, clueText };
+  }
+
+  _tryBuyClue(idx) {
+    if (this.gs.phase !== VI.PHASES.ACCUSE) return;
+    if (this._clueMarketFrozen) return;
+    const r = this.gs.round;
+    if (!r || !r.clues[idx] || r.clues[idx].bought) return;
+    if (this.gs.bet <= 0) {
+      this.events.emit('game:error', 'Place a bet before buying clues');
+      return;
+    }
+    const cost = r.getClueCost(this.gs.bet);
+    if (cost > this.gs.balance) {
+      this.events.emit('game:error', `Need $${cost} to buy this clue`);
+      return;
+    }
+    // Deduct from balance immediately
+    this.gs.balance -= cost;
+    this._balanceText.setText(`$${this.gs.balance.toLocaleString()}`);
+    this.events.emit('game:balance_update', this.gs.balance);
+
+    // Commit to round state
+    r.buyClue(idx, this.gs.bet);
+
+    // Refresh BOTH cards — the unbought one's cost just doubled
+    this._refreshClueCard(0);
+    this._refreshClueCard(1);
+    this._updateNoClueBonusIndicator();
+
+    this._addClue(`🛒 Bought CLUE #${idx + 1} for $${cost}.`, VI.HEX.GOLD);
+  }
+
+  _refreshClueCard(idx) {
+    const card = this._clueCards && this._clueCards[idx];
+    const r    = this.gs.round;
+    if (!card || !r || !r.clues[idx]) return;
+    const clue = r.clues[idx];
+
+    if (clue.bought) {
+      card.headerLbl.setText(`🔍 CLUE #${idx + 1}`).setColor(VI.HEX.GOLD);
+      card.btnG.setVisible(false);
+      card.btnLbl.setVisible(false);
+      card.btnZone.setVisible(false);
+      card.btnZone.disableInteractive();
+      card.clueText.setText(clue.text);
+      return;
+    }
+    if (this._clueMarketFrozen) {
+      card.headerLbl.setText('🔒 INFORMATION CLOSED').setColor(VI.HEX.MAGENTA);
+      card.btnG.setVisible(false);
+      card.btnLbl.setVisible(false);
+      card.btnZone.setVisible(false);
+      card.btnZone.disableInteractive();
+      card.clueText.setText('');
+      return;
+    }
+    // Available state — show cost
+    const cost = r.getClueCost(this.gs.bet);
+    card.headerLbl.setText(`🔒 CLUE #${idx + 1}`).setColor(VI.HEX.CYAN);
+    card.btnG.setVisible(true);
+    card.btnLbl.setText(`BUY  $${cost}`).setVisible(true);
+    card.btnZone.setVisible(true);
+    card.btnZone.setInteractive({ cursor: 'pointer' });
+    card.clueText.setText('');
+  }
+
+  _updateNoClueBonusIndicator() {
+    if (!this._noClueBonusLbl) return;
+    const active = this.gs.round && this.gs.round.isNoClueBonusActive();
+    if (active) {
+      this._noClueBonusLbl.setText('✨  NO-CLUE BONUS  ×1.20').setColor(VI.HEX.GOLD).setAlpha(1);
+    } else {
+      if (this._noClueBonusPulse) { this._noClueBonusPulse.stop(); }
+      this._noClueBonusLbl.setText('— NO-CLUE BONUS FORFEITED —').setColor('#888888').setAlpha(0.55);
+    }
+  }
+
+  _setClueMarketVisible(visible) {
+    if (!this._clueCards) return;
+    this._clueCards.forEach(c => {
+      [c.bg, c.headerLbl, c.btnG, c.btnLbl, c.btnZone, c.clueText].forEach(o => {
+        if (o && typeof o.setVisible === 'function') o.setVisible(visible);
+      });
+    });
+    if (this._noClueBonusLbl) this._noClueBonusLbl.setVisible(visible);
+  }
+
+  _resetClueMarket() {
+    this._clueMarketFrozen = false;
+    if (this._noClueBonusPulse) {
+      this._noClueBonusPulse.resume && this._noClueBonusPulse.resume();
+      this._noClueBonusPulse.restart && this._noClueBonusPulse.restart();
+    }
+    if (this._clueCards) {
+      this._clueCards.forEach((_, i) => this._refreshClueCard(i));
+    }
+    this._updateNoClueBonusIndicator();
+  }
+
+  _freezeClueMarket() {
+    this._clueMarketFrozen = true;
+    if (this._clueCards) {
+      this._clueCards.forEach((_, i) => this._refreshClueCard(i));
+    }
   }
 
   _clearClueFeed() {
@@ -1099,17 +1309,31 @@ class GameScene extends Phaser.Scene {
       fontFamily: VI.FONTS.BODY, fontSize: '15px', color: VI.HEX.CREAM,
     }).setOrigin(0.5);
 
-    // ── Multiplier breakdown (win only) ──────────────────────
+    // ── Multiplier breakdown (win only, v0.5) ─────────────────
     let multText = null, multSubText = null;
     if (win && this.gs.bet > 0) {
       const gross = delta + this.gs.bet;             // delta is net profit; gross = profit + stake
       const mult  = gross / this.gs.bet;
-      const tag   = this.gs.wrongCount === 1 ? '  (Acc#2 × 0.40)' : '';
+      const bd    = this.gs.round.getPayoutBreakdown
+        ? this.gs.round.getPayoutBreakdown(this.gs.selectedIdx, this._folderPct)
+        : null;
+
       multText = this.add.text(cx, cy - 48, `MULTIPLIER  ×${mult.toFixed(2)}`, {
         fontFamily: VI.FONTS.HEADING, fontSize: '18px', color: VI.HEX.CYAN, letterSpacing: 5,
       }).setOrigin(0.5);
-      multSubText = this.add.text(cx, cy - 24, `bet $${this.gs.bet}  →  $${gross.toLocaleString()}${tag}`, {
-        fontFamily: VI.FONTS.MONO, fontSize: '12px', color: VI.HEX.CREAM, alpha: 0.7,
+
+      const parts = [];
+      if (bd) {
+        parts.push(`${bd.suspMult.toFixed(1)}× base`);
+        parts.push(`${bd.foldMult.toFixed(2)}× folder`);
+        parts.push(`${bd.weapMult.toFixed(1)}× weapon`);
+        if (bd.earlyBird) parts.push('+15% early');
+        if (bd.noClue)    parts.push('+20% no-clue');
+      }
+      if (this.gs.wrongCount === 1) parts.push('Acc#2 ×0.30');
+
+      multSubText = this.add.text(cx, cy - 24, parts.join('  ·  '), {
+        fontFamily: VI.FONTS.MONO, fontSize: '11px', color: VI.HEX.CREAM, alpha: 0.75,
       }).setOrigin(0.5);
     }
 

@@ -475,12 +475,14 @@ class LobbyScene extends Phaser.Scene {
 
   _refreshPlate() {
     const n = this._suspectCount();
-    const base = (n * 0.8).toFixed(1);
-    const max  = (n * 0.8 * 1.5 * 3.0).toFixed(1);   // folder=1.5×, weapon=3.0× rare
+    // v0.5: non-linear suspect mults from VI.GAME.SUSPECT_MULTS
+    const base = VI.GAME.SUSPECT_MULTS[n] || (n * 0.8);
+    // Best-case max ≈ base × folder 1.5 × weapon 3.0 × early 1.15 × no-clue 1.20
+    const max  = base * 1.5 * 3.0 * 1.15 * 1.20;
     this._plateRefs.guests.setText(`${n} GUESTS`);
-    this._plateRefs.base.setText(`BASE  ${base}×`);
+    this._plateRefs.base.setText(`BASE  ${base.toFixed(1)}×`);
     this._plateRefs.odds.setText(`ODDS  1 IN ${n}`);
-    this._plateRefs.maxP.setText(`MAX   ${max}×`);
+    this._plateRefs.maxP.setText(`MAX   ${max.toFixed(1)}×`);
   }
 
   _suspectCount() {

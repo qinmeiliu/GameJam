@@ -105,20 +105,76 @@ class RoundController {
     this.roomName    = room.name;
     this.motive      = motive;
 
-    // Build two clue texts (reveal at 12s / 24s)
-    const cluePool   = this._shuffle([...d.clueEvents]).slice(0, 2);
-    // Clue 1: implicates the killer obliquely
-    // Clue 2: broader hint + action unlock info
-    const killerName = this.suspects[this.killerIdx].name;
-    this.clues = cluePool.map((ce, i) => {
-      let text;
-      if (i === 0) {
-        text = `Ducky found ${ce.object}. "${killerName}" scrawled faintly underneath. ${ce.duckyDoes}!`;
-      } else {
-        text = `Ducky discovered ${ce.object}. Motive may involve ${motive}. ${ce.duckyDoes}!`;
-      }
-      return { text, action: ce.action, actionLabel: ce.label, suspectIdx: i === 0 ? this.killerIdx : null };
+    // ── v0.5: CLUE MARKET ────────────────────────────────────
+    // Pick two random clue templates from the 12-template pool. Bind the
+    // {placeholder} variables with round data. Templates never name the
+    // killer; they only hint at trait, weapon, motive, or pure flavor.
+    const objectPool = this._shuffle([...d.clueEvents]);
+    const templatePool = this._shuffle([...d.clueTemplates]).slice(0, 2);
+    const killerTrait = this.suspects[this.killerIdx].trait;
+
+    // Random NON-killer trait pool — used by 'misleading' templates so the
+    // player thinks they're learning something but they're actually being
+    // sent in the wrong direction.
+    const innocents = this.suspects.filter((_, i) => i !== this.killerIdx);
+    const pickRandomTrait = () => {
+      if (innocents.length === 0) return killerTrait;
+      return innocents[Math.floor(Math.random() * innocents.length)].trait;
+    };
+
+    this.clues = templatePool.map((tpl, i) => {
+      const obj = objectPool[i % objectPool.length];
+      const text = tpl.text
+        .replace(/\{object\}/g,      obj.object)
+        .replace(/\{killerTrait\}/g, killerTrait)
+        .replace(/\{randomTrait\}/g, pickRandomTrait())
+        .replace(/\{weapon\}/g,      weaponName)
+        .replace(/\{motive\}/g,      motive);
+      return {
+        text,
+        tier:     tpl.tier,                  // 'reliable' | 'misleading' | 'flavor' (informational only)
+        bought:   false,                     // becomes true on buyClue(i)
+        cost:     0,                         // populated by getClueCost(i) on each call
+      };
     });
+
+    // Clue market state — purchases happen via buyClue()/skipped by leaving
+    // the cards locked. cluesPurchased is consulted by calculatePayout for
+    // the No-Clue Bonus.
+    this.cluesPurchased = 0;
+  }
+
+  // ── Clue market (v0.5) ────────────────────────────────────
+
+  /**
+   * Cost of buying clue at index `idx` GIVEN the current cluesPurchased count.
+   * Order-based pricing: FIRST clue purchased costs CLUE_COST_FIRST_FRAC × bet,
+   * SECOND costs CLUE_COST_SECOND_FRAC × bet. Doesn't matter which card was
+   * clicked first; what matters is how many are already bought.
+   */
+  getClueCost(bet) {
+    const isFirst = this.cluesPurchased === 0;
+    const frac = isFirst ? VI.GAME.CLUE_COST_FIRST_FRAC : VI.GAME.CLUE_COST_SECOND_FRAC;
+    return Math.max(1, Math.round(bet * frac));
+  }
+
+  /**
+   * Mark a clue as purchased. Returns the cost paid (caller deducts from balance).
+   * Returns 0 if the clue was already bought (no double-charge).
+   */
+  buyClue(idx, bet) {
+    if (idx < 0 || idx >= this.clues.length) return 0;
+    if (this.clues[idx].bought) return 0;
+    const cost = this.getClueCost(bet);
+    this.clues[idx].bought = true;
+    this.clues[idx].cost   = cost;
+    this.cluesPurchased++;
+    return cost;
+  }
+
+  /** True iff the No-Clue Bonus multiplier should apply at payout time. */
+  isNoClueBonusActive() {
+    return this.cluesPurchased === 0;
   }
 
   // ── Bet lock-in (drives Early Bird bonus) ─────────────────
@@ -152,13 +208,13 @@ class RoundController {
     const grossMult = this.getPayoutMultiplier(suspectIdx, folderPct);
     let payout      = bet * grossMult;
 
-    // Action-driven modifiers
+    // Action-driven modifiers (deferred post-MVP, kept for forward compat)
     if (this._actionUsed['DOUBLE_DOWN']) payout *= 2;
     if (this._actionUsed['SPLIT'])       payout *= 0.5;
     if (this._chaosRoll !== null)        payout *= this._chaosRoll;
 
-    // Accusation #2 penalty (GDD: gross × 0.40)
-    if (isSecondAccusation) payout *= 0.40;
+    // Accusation #2 penalty (v0.5: gross × 0.30, was 0.40)
+    if (isSecondAccusation) payout *= VI.GAME.ACC2_PENALTY;
 
     return Math.round(payout);
   }
@@ -183,15 +239,34 @@ class RoundController {
 
   /**
    * Returns the canonical gross multiplier so the UI can show "1.42×" in
-   * real time without re-deriving it. Includes Early Bird if registered.
+   * real time without re-deriving it. v0.5: non-linear suspect mults,
+   * plus the No-Clue Bonus stacks ×1.20 when cluesPurchased === 0.
    */
   getPayoutMultiplier(suspectIdx, folderPct) {
     const folderUsed = (this._lockedFolder !== null) ? this._lockedFolder : folderPct;
-    const suspMult   = this.suspectCount * 0.8;
+    const suspMult   = VI.GAME.SUSPECT_MULTS[this.suspectCount] || (this.suspectCount * 0.9);
     const foldMult   = this._folderMultiplier(folderUsed);
     const weapMult   = MURDER_DATA.weaponMultipliers[this.weaponTier] || 1.0;
-    const earlyMult  = this._earlyBird ? 1.15 : 1.0;
-    return suspMult * foldMult * weapMult * earlyMult;
+    const earlyMult  = this._earlyBird ? (1 + VI.GAME.EARLY_BIRD_BONUS) : 1.0;
+    const clueMult   = this.isNoClueBonusActive() ? VI.GAME.NO_CLUE_BONUS_MULT : 1.0;
+    return suspMult * foldMult * weapMult * earlyMult * clueMult;
+  }
+
+  /**
+   * Detailed multiplier breakdown for the scoreboard. Useful when the UI
+   * wants to show "base 2.5× · folder 0.85× · weapon 1.05× · early +15% ·
+   * no-clue +20%" instead of a single combined number.
+   */
+  getPayoutBreakdown(suspectIdx, folderPct) {
+    const folderUsed = (this._lockedFolder !== null) ? this._lockedFolder : folderPct;
+    return {
+      suspMult:  VI.GAME.SUSPECT_MULTS[this.suspectCount] || (this.suspectCount * 0.9),
+      foldMult:  this._folderMultiplier(folderUsed),
+      weapMult:  MURDER_DATA.weaponMultipliers[this.weaponTier] || 1.0,
+      earlyBird: !!this._earlyBird,
+      noClue:    this.isNoClueBonusActive(),
+      cluesPurchased: this.cluesPurchased,
+    };
   }
 
   _folderMultiplier(pct) {

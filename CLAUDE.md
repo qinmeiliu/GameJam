@@ -12,31 +12,48 @@
 - **Platform:** Vegas Infinite web library, deployed via GitHub Pages (100% static)
 - **Engine:** Phaser 3.80.1 (CDN, no build step)
 - **Genre:** Whodunnit casino game — 30% logic / 70% chaos
-- **GDD version:** v0.4 (`GDD.md` is the source of truth)
+- **GDD version:** v0.5 (`GDD.md` is the source of truth — see v0.5 CHANGELOG at top)
 - **Repo:** `qinmeiliu/GameJam` → https://qinmeiliu.github.io/GameJam/
 - **Owner:** Meimei (qinmei@getluckyvr.com)
 
-## CORE DESIGN PILLARS
+## CORE DESIGN PILLARS (v0.5)
 
-1. **30/70 Chaos** — the murder is not solvable. Clues are nonsense. Trust scores are cosmetic. Killer is pure equal-weight RNG. House edge ~20% held constant across suspect counts via `payout = suspectCount × 0.8`.
-2. **Two-sub-phase betting** — BETTING phase shows the case file (open-ended, no timer); player places bet → ACCUSE phase (30s timed): suspects revealed with quotes, folder burns, player must accuse. Action cards exist in code but are temporarily removed from the UI pending redesign.
-3. **Dual Accusation** — wrong Accusation #1 → innocent dramatically executed, pool drops to 40%, folder burns 3× faster, Accusation #2 window opens (15s). Two-strikes-out.
-4. **Glow-Fi Neo-Vector art** — Flood Black base (`#05050a`), Cyan/Magenta/Gold accents, dot-matrix Linear GFX, Hex Holding Devices, every element glows.
+1. **30/70 Chaos** — the murder is not solvable. Clues are misdirection. Trust scores are cosmetic. Killer is pure equal-weight RNG.
+2. **Non-linear risk curve** — suspect counts have different RTPs (3→90%, 4→94%, 5→96%, 6→100% on no-clue plays). Players pick their volatility profile, not just their stakes.
+3. **Clue Market** — clues are purchaseable, not auto-revealed. First clue = 10% of bet, second = 20%. Skipping all clues earns a ×1.20 No-Clue Bonus. Clues never name the killer.
+4. **Two-sub-phase betting** — BETTING phase shows the case file (open-ended, no timer); player places bet → ACCUSE phase (30s timed): suspects revealed with quotes, folder burns, player must accuse. Action cards deferred post-MVP.
+5. **Dual Accusation** — wrong Accusation #1 → innocent dramatically executed, second-chance window opens (15s, clue market frozen, no new clue buys). Acc#2 correct = ×0.30 of gross (down from v0.4's 0.40).
+6. **Glow-Fi Neo-Vector art** — Flood Black base (`#05050a`), Cyan/Magenta/Gold accents, dot-matrix Linear GFX, Hex Holding Devices, every element glows.
 
-## PAYOUT MATH (canonical — must match `RoundController.js`)
+## PAYOUT MATH (v0.5 canonical — must match `RoundController.js`)
 
 ```
-GROSS = bet × (suspectCount × 0.8)
-          × folder_multiplier      // lerp 0.2× → 1.5× over 20-100% integrity
-          × weapon_multiplier      // 1.0 / 1.5 / 3.0 common / uncommon / rare
-          × (1 + early_bird_bonus) // +0.15 if bet locked while integrity > 60%
-          × action_modifiers       // Double Down ×2, Chaos Roll ×rand(0.5–3), etc.
+GROSS = bet × suspect_multiplier              // 1.8 / 2.5 / 3.2 / 4.0 for 3/4/5/6 suspects
+            × folder_multiplier               // lerp 0.2× → 1.5× over 20-100% integrity
+            × weapon_multiplier               // 1.0 / 1.5 / 3.0 common / uncommon / rare
+            × (1 + early_bird_bonus)          // +0.15 if bet locked while integrity > 60%
+            × no_clue_bonus                   // ×1.20 if cluesPurchased === 0, else ×1.0
+            × action_modifiers                // post-MVP — currently 1.0
 
-Accusation #2 win → GROSS × 0.40
+Accusation #2 correct → GROSS × 0.30
 NET = GROSS - bet
+Clue costs deducted from balance at purchase time (NOT subtracted from gross):
+  - First clue purchased: 10% of bet
+  - Second clue purchased: 20% of bet
 ```
 
 Starting balance: **1,000 chips** per session.
+
+## RTP TABLE (v0.5 — for designer reference, NOT shown to player)
+
+|              | 0 clues | 1 clue  | 2 clues |
+|--------------|---------|---------|---------|
+| 3 suspects   | 90%     | 65%     | 45%     |
+| 4 suspects   | 94%     | 68%     | 48%     |
+| 5 suspects   | 96%     | 70%     | 50%     |
+| 6 suspects   | 100%    | 73%     | 53%     |
+
+Casino-optimal play: 6 suspects + 0 clues. Worst-RTP play: 3 suspects + 2 clues.
 
 ## FILE STRUCTURE
 
@@ -141,7 +158,7 @@ Iron rule: Cyan and Magenta never touch — separate with min 8px Flood Black. G
 
 ---
 
-**Last updated:** 2026-05-13 (Sprint 1) — phase state machine, GDD-canonical 8-action system, Early Bird bonus, INSURANCE/CASH_OUT, folder multiplier corrected to GDD.
+**Last updated:** 2026-05-14 (v0.5 design) — Casino redesign: clue market, non-linear suspect mults, no-clue bonus, Acc#2 0.40→0.30, RTP tightened to casino-like ranges. See GDD v0.5 CHANGELOG.
 
 ## NEXT SUGGESTED SPRINTS
 

@@ -42,7 +42,9 @@ Clue costs deducted from balance at purchase time (NOT subtracted from gross):
   - Second clue purchased: 20% of bet
 ```
 
-Starting balance: **1,000 chips** per session.
+Starting balance: **10,000 chips** per session. Minimum bet: **10 chips**.
+
+Chip denominations (v0.5.2): `[10, 25, 100, 500, 1000]`. Colors map to white / red / green / cyan / gold respectively.
 
 ## RTP TABLE (v0.5 — for designer reference, NOT shown to player)
 

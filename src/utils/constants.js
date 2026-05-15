@@ -92,8 +92,9 @@ const VI = {
   GAME: {
     WIDTH:  1280,
     HEIGHT: 720,
-    CHIP_DENOMINATIONS: [1, 5, 25, 100, 500],
-    DEFAULT_BALANCE: 1000,
+    CHIP_DENOMINATIONS: [10, 25, 100, 500, 1000],
+    DEFAULT_BALANCE: 10000,
+    MIN_BET:         10,    // smallest chip value; CONFIRM BET rejects below this
 
     // ── v0.5 Casino math (see GDD v0.5 CHANGELOG) ─────────────
     // Non-linear suspect multipliers — index by suspectCount (3..6).

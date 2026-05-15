@@ -177,7 +177,16 @@ class UIScene extends Phaser.Scene {
   }
 
   _drawChip(x, y, value) {
-    const CHIP_COLORS = { 1: 0xffffff, 5: 0xff4444, 25: 0x44cc44, 100: VI.COLORS.CYAN, 500: VI.COLORS.GOLD };
+    // v0.5.2: denominations bumped to [10, 25, 100, 500, 1000] alongside a
+    // 10K bankroll. Colors shift accordingly — gold reserved for the new
+    // top tier ($1K), and the previous gold ($500) drops to cyan.
+    const CHIP_COLORS = {
+      10:   0xffffff,           // white  — minimum bet
+      25:   0xff4444,           // red
+      100:  0x44cc44,           // green
+      500:  VI.COLORS.CYAN,     // cyan
+      1000: VI.COLORS.GOLD,     // gold   — high roller
+    };
     const color = CHIP_COLORS[value] != null ? CHIP_COLORS[value] : VI.COLORS.VI_PURPLE;
     const r     = 22;
 
@@ -193,7 +202,8 @@ class UIScene extends Phaser.Scene {
       g.lineBetween(x + Math.cos(rad) * 16, y + Math.sin(rad) * 16, x + Math.cos(rad) * r, y + Math.sin(rad) * r);
     }
 
-    const label = value >= 100 ? `${value / 100}C` : `${value}`;
+    // Compact label: literal for under $1K, "K" suffix for thousands.
+    const label = value >= 1000 ? `${value / 1000}K` : `${value}`;
     const txt = this.add.text(x, y, label, {
       fontFamily: VI.FONTS.HEADING, fontSize: '11px', color: '#ffffff',
     }).setOrigin(0.5);
@@ -258,7 +268,13 @@ class UIScene extends Phaser.Scene {
     cfZone.on('pointerover', () => { cfG.clear(); cfG.fillStyle(VI.COLORS.CYAN, 1); cfG.fillRoundedRect(cfX - cfW/2, cfY - cfH/2, cfW, cfH, 6); cfLbl.setColor(VI.HEX.FLOOD_BLACK); });
     cfZone.on('pointerout',  () => { cfG.clear(); cfG.fillStyle(VI.COLORS.VI_BLUE, 0.9); cfG.fillRoundedRect(cfX - cfW/2, cfY - cfH/2, cfW, cfH, 6); cfG.lineStyle(1, VI.COLORS.CYAN, 0.6); cfG.strokeRoundedRect(cfX - cfW/2, cfY - cfH/2, cfW, cfH, 6); cfLbl.setColor('#fff'); });
     cfZone.on('pointerup', () => {
-      if (this._accumulatedBet <= 0) { this._showToast('Place a bet first!', VI.HEX.MAGENTA, 1200); return; }
+      if (this._accumulatedBet <= 0) {
+        this._showToast('Place a bet first!', VI.HEX.MAGENTA, 1200); return;
+      }
+      // Reject bets below the minimum (clue math gets unreadable below $10).
+      if (this._accumulatedBet < VI.GAME.MIN_BET) {
+        this._showToast(`Minimum bet is $${VI.GAME.MIN_BET}`, VI.HEX.MAGENTA, 1500); return;
+      }
       const gs = this._gs;
       if (!gs) return;
       // CONFIRM BET is only valid during BETTING (transitions us to ACCUSE)

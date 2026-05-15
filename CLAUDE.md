@@ -160,7 +160,9 @@ Iron rule: Cyan and Magenta never touch — separate with min 8px Flood Black. G
 
 ---
 
-**Last updated:** 2026-05-14 (v0.5 design) — Casino redesign: clue market, non-linear suspect mults, no-clue bonus, Acc#2 0.40→0.30, RTP tightened to casino-like ranges. See GDD v0.5 CHANGELOG.
+**Last updated:** 2026-05-15 — ACCUSE phase visual polish pass: casino-slot suspect reveal (drop-from-above + bounce + brand-color landing flash), idle hex breathing pulse, rotating gold sparkles on selected suspect, folder-burn screen-edge warning vignette at 60/40/25% integrity thresholds. Two new art briefs landed (`ART_BRIEF_ROOMS.md` neon line + `ART_BRIEF_SUSPECTS.md` flat mascot). Cache-bust bumped to `20260515-1`.
+
+**Previous:** 2026-05-14 (v0.5 design) — Casino redesign: clue market, non-linear suspect mults, no-clue bonus, Acc#2 0.40→0.30, RTP tightened to casino-like ranges. See GDD v0.5 CHANGELOG.
 
 ## NEXT SUGGESTED SPRINTS
 

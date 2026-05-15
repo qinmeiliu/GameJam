@@ -33,6 +33,7 @@ class GameScene extends Phaser.Scene {
     this._burnMultiplier  = 1;     // PRESS sets this to 3
     this._suspectLockedByAction = false;  // DOUBLE_DOWN locks suspect choice
     this._phaseTimers     = [];    // active delayedCall handles per phase (cleared on exit)
+    this._burnStage       = 0;     // 0/1/2/3 — which screen-edge warning we've already fired this round
 
     // Null out scene-owned game objects so we don't carry stale refs to
     // destroyed Phaser objects from a previous scene instance (we hit
@@ -41,6 +42,7 @@ class GameScene extends Phaser.Scene {
     this._folderFlame     = null;
     this._emberEmitter    = null;
     this._folderLabel     = null;
+    this._burnVignetteG   = null;
   }
 
   create() {
@@ -68,6 +70,10 @@ class GameScene extends Phaser.Scene {
     // "← LOBBY" back-link, visible only during BETTING so the player can
     // re-pick suspect count before committing a bet.
     this._buildBackToLobbyButton();
+
+    // Screen-edge vignette used to pulse a danger warning when the folder
+    // burns past 60/40/25% integrity. Built once, alpha-tweened on demand.
+    this._buildBurnVignette();
 
     // Generate first round
     this._startRound();
@@ -113,6 +119,12 @@ class GameScene extends Phaser.Scene {
     this._timerExpired   = false;
     this._burnMultiplier = 1;
     this._suspectLockedByAction = false;
+    this._burnStage      = 0;
+    if (this._burnVignetteG) {
+      this.tweens.killTweensOf(this._burnVignetteG);
+      this._burnVignetteG.clear();
+      this._burnVignetteG.setAlpha(0);
+    }
 
     // Destroy every overlay/badge created during the previous round, so
     // the scoreboard, killer marker, etc. don't bleed into the new case.
@@ -296,6 +308,10 @@ class GameScene extends Phaser.Scene {
     const wrongIdx = gs.selectedIdx;
     const wrongSpr = this._suspectSprites[wrongIdx];
     if (wrongSpr) {
+      // Stop the idle breath yoyo before fading — otherwise the breath tween
+      // will keep tweening this.g.alpha back to ~0.86 and fight the dim.
+      if (wrongSpr.breathTween) { wrongSpr.breathTween.stop(); wrongSpr.breathTween = null; }
+      this._clearSuspectSparkles(wrongSpr);
       this.tweens.add({
         targets: [wrongSpr.g, wrongSpr.nameText, wrongSpr.silG],
         alpha: 0.15, duration: 400,
@@ -384,11 +400,73 @@ class GameScene extends Phaser.Scene {
     this._refreshFolderBar();
     this.events.emit('game:folder_update', this._folderPct);
 
+    // Screen-edge warning pulses at each burn threshold crossed. _burnStage
+    // tracks the highest stage we've already fired so each pulse plays once
+    // per round (a clue-buy or PRESS card won't replay them).
+    const pct = this._folderPct;
+    const newStage =
+      pct <= 0.25 ? 3 :
+      pct <= 0.40 ? 2 :
+      pct <= 0.60 ? 1 : 0;
+    if (newStage > this._burnStage) {
+      this._burnStage = newStage;
+      this._pulseBurnVignette(newStage);
+    }
+
     if (this._folderPct <= floor && !this._timerExpired) {
       this._timerExpired = true;
       this._addClue('⏰ TIME OUT — folder at minimum. Accuse now!', VI.HEX.VI_RED);
       this.events.emit('game:timeout');
     }
+  }
+
+  // ── Burn-warning screen vignette ───────────────────────────
+  // Stacked stroked rects at the screen edges, painted on-demand in the
+  // stage's danger color. Alpha-tweens 0 → 1 → 0 in ~720ms to give a
+  // single "warning flash" feel without persistent visual noise.
+  _buildBurnVignette() {
+    this._burnVignetteG = this.add.graphics();
+    this._burnVignetteG.setAlpha(0);
+    this._burnVignetteG.setDepth(900);   // above gameplay, below modals
+  }
+  _pulseBurnVignette(stage) {
+    if (!this._burnVignetteG) return;
+    const color =
+      stage === 1 ? VI.COLORS.VI_AMBER  :
+      stage === 2 ? VI.COLORS.VI_ORANGE :
+                    VI.COLORS.VI_RED;
+    const W = this.scale.width;
+    const H = this.scale.height;
+    this._burnVignetteG.clear();
+    // Outer-to-inner glow bands. Thicker outer = softer falloff.
+    [
+      { t: 60, a: 0.06 },
+      { t: 40, a: 0.16 },
+      { t: 22, a: 0.30 },
+      { t: 8,  a: 0.55 },
+    ].forEach(({ t, a }) => {
+      this._burnVignetteG.lineStyle(t, color, a);
+      this._burnVignetteG.strokeRect(t / 2, t / 2, W - t, H - t);
+    });
+    this.tweens.killTweensOf(this._burnVignetteG);
+    this._burnVignetteG.setAlpha(0);
+    this.tweens.add({
+      targets: this._burnVignetteG,
+      alpha: { from: 0, to: 1 },
+      duration: 180, ease: 'Cubic.easeOut',
+      yoyo: true, hold: 80,
+      // After yoyo, also do a soft second beat for stages 2 and 3 to escalate the urgency.
+      onComplete: () => {
+        if (stage >= 2) {
+          this.tweens.add({
+            targets: this._burnVignetteG,
+            alpha: { from: 0, to: 0.55 },
+            duration: 220, ease: 'Sine.easeInOut',
+            yoyo: true, delay: 80,
+          });
+        }
+      },
+    });
   }
 
   // Lightweight tick for BETTING — increments _timerElapsed and updates the
@@ -615,6 +693,11 @@ class GameScene extends Phaser.Scene {
     if (!r) return;
 
     this._suspectSprites.forEach(s => {
+      // Kill any in-flight tweens before destroying targets — Phaser will
+      // null-deref a tween whose target was already destroyed.
+      if (s.breathTween)  s.breathTween.stop();
+      if (s.sparkleTween) s.sparkleTween.stop();
+      if (s.sparkles) s.sparkles.forEach(sp => sp.destroy());
       [s.g, s.nameText, s.highlightG, s.zone, s.silG, s.bubbleG, s.bubbleText]
         .forEach(o => { if (o) o.destroy(); });
     });
@@ -724,22 +807,106 @@ class GameScene extends Phaser.Scene {
       // Suspects start hidden — they reveal when ACCUSE phase begins.
       [g, silG, nameText].forEach(o => o.setAlpha(0));
 
+      // No clicks until the reveal animation finishes — prevents the player
+      // from accidentally locking in a guess on a mid-air hex.
+      zone.disableInteractive();
+
+      // Track original landing positions so the casino-slot drop can shift
+      // each visual UP by a fixed amount and tween cleanly back DOWN.
+      // (Graphics drawn at world coords still respond to gameObject.y.)
+      const baseG_Y        = g.y;
+      const baseSilG_Y     = silG.y;
+      const baseNameText_Y = nameText.y;
+
       this._suspectSprites.push({
         g, silG, nameText, highlightG, zone,
         bubbleG, bubbleText,
         cx, cy, tokenR, idx, sus,
+        // visual state slots
+        baseG_Y, baseSilG_Y, baseNameText_Y,
+        sparkles:    [],      // orbiting gold dots when selected
+        sparkleTween: null,
+        breathTween: null,
+        revealed:    false,
       });
     });
   }
 
-  // Staggered fade-in for ACCUSE phase — "the cards are dealt" moment
+  // Casino-slot reveal — each suspect drops from above with a bounce, fades
+  // up, fires a brand-color impact ring on landing, then starts breathing.
+  // Replaces the bare alpha fade so the ACCUSE moment hits like a slot pull.
   _revealSuspects() {
+    const DROP        = 260;   // px above final position
+    const DROP_MS     = 520;
+    const STAGGER_MS  = 90;
+
     this._suspectSprites.forEach((s, i) => {
+      // Shift up to start position. We move ALL three so the hex + silhouette
+      // + name drop together as a unit.
+      s.g.y        = s.baseG_Y        - DROP;
+      s.silG.y     = s.baseSilG_Y     - DROP;
+      s.nameText.y = s.baseNameText_Y - DROP;
+
+      const delay = i * STAGGER_MS;
+
+      // Position drop with bounce
+      this.tweens.add({
+        targets: [s.g, s.silG, s.nameText],
+        y: `+=${DROP}`,
+        duration: DROP_MS,
+        delay,
+        ease: 'Bounce.Out',
+        onComplete: () => {
+          // Land flash — bright brand-color ring expanding from the hex
+          this._spawnHexImpact(s.cx, s.cy, s.tokenR, s.sus.color);
+          // Re-arm interactivity
+          s.zone.setInteractive({ cursor: 'pointer' });
+          s.revealed = true;
+          // Start idle breathing pulse on the hex outline
+          s.breathTween = this.tweens.add({
+            targets: s.g,
+            alpha: { from: 1.0, to: 0.86 },
+            duration: 1400 + (i * 90),   // detune per-suspect so they don't pulse in unison
+            ease: 'Sine.easeInOut',
+            yoyo: true,
+            repeat: -1,
+          });
+        },
+      });
+
+      // Alpha rise rides the first 60% of the drop — they emerge as they fall.
       this.tweens.add({
         targets: [s.g, s.silG, s.nameText],
         alpha: 1,
-        duration: 400, delay: i * 70, ease: 'Cubic.easeOut',
+        duration: Math.floor(DROP_MS * 0.6),
+        delay,
+        ease: 'Cubic.easeOut',
       });
+    });
+  }
+
+  // Brief radial pop at a hex landing site. Two stacked rings — a fat
+  // brand-color halo + a thin bright outline — expand and fade in 380ms.
+  _spawnHexImpact(cx, cy, r, color) {
+    const ring = this.add.graphics();
+    let scale = 1.0;
+    let alpha = 0.95;
+    const startR = r * 0.9;
+    const draw = () => {
+      ring.clear();
+      ring.lineStyle(14, color, alpha * 0.35);
+      ring.strokeCircle(cx, cy, startR * scale);
+      ring.lineStyle(2, 0xffffff, alpha);
+      ring.strokeCircle(cx, cy, startR * scale);
+    };
+    draw();
+    this.tweens.add({
+      targets: { s: 1.0, a: 0.95 },
+      s: 2.2, a: 0,
+      duration: 420,
+      ease: 'Cubic.easeOut',
+      onUpdate: (tw, tgt) => { scale = tgt.s; alpha = tgt.a; draw(); },
+      onComplete: () => ring.destroy(),
     });
   }
 
@@ -841,15 +1008,68 @@ class GameScene extends Phaser.Scene {
 
   _refreshSuspectHighlights() {
     const sel = this.gs.selectedIdx;
-    this._suspectSprites.forEach(({ highlightG, cx, cy, tokenR, idx }) => {
+    this._suspectSprites.forEach((s) => {
+      const { highlightG, cx, cy, tokenR, idx } = s;
       highlightG.clear();
+      // Always tear down old sparkles before deciding what to draw — selection
+      // can jump from one suspect to another in a single click.
+      this._clearSuspectSparkles(s);
+
       if (idx === sel) {
         highlightG.lineStyle(3, VI.COLORS.GOLD, 1);
         highlightG.strokeCircle(cx, cy, tokenR + 12);
         highlightG.lineStyle(10, VI.COLORS.GOLD, 0.18);
         highlightG.strokeCircle(cx, cy, tokenR + 16);
+        this._spawnSuspectSparkles(s);
       }
     });
+  }
+
+  // 5 small gold dots orbiting the selected hex. Tweens a phase counter and
+  // re-positions the dots each onUpdate so they slowly rotate clockwise.
+  // Also gently pulses their alpha so they twinkle.
+  _spawnSuspectSparkles(s) {
+    const N = 5;
+    const orbitR = s.tokenR + 24;
+    const angleOffset = Math.PI * 2 / N;
+    for (let i = 0; i < N; i++) {
+      const dot = this.add.graphics();
+      dot.fillStyle(VI.COLORS.GOLD, 1);
+      dot.fillCircle(0, 0, 2.4);
+      dot.fillStyle(VI.COLORS.GOLD, 0.30);
+      dot.fillCircle(0, 0, 5.5);
+      dot.x = s.cx;
+      dot.y = s.cy;
+      s.sparkles.push(dot);
+    }
+
+    // Single tween drives the orbit phase from 0 -> 2π; onUpdate positions
+    // every dot, so we don't pay for 5 separate tweens.
+    const tgt = { phase: 0 };
+    s.sparkleTween = this.tweens.add({
+      targets: tgt,
+      phase: Math.PI * 2,
+      duration: 5200,
+      repeat: -1,
+      ease: 'Linear',
+      onUpdate: () => {
+        s.sparkles.forEach((dot, i) => {
+          const a = tgt.phase + angleOffset * i;
+          dot.x = s.cx + Math.cos(a) * orbitR;
+          dot.y = s.cy + Math.sin(a) * orbitR;
+          // Twinkle alpha — peaks at the "front" of the orbit nearest the camera.
+          dot.alpha = 0.55 + 0.45 * (0.5 + 0.5 * Math.sin(a * 2 + tgt.phase * 3));
+        });
+      },
+    });
+  }
+
+  _clearSuspectSparkles(s) {
+    if (s.sparkleTween) { s.sparkleTween.stop(); s.sparkleTween = null; }
+    if (s.sparkles) {
+      s.sparkles.forEach(sp => sp.destroy());
+      s.sparkles = [];
+    }
   }
 
   // ── Case file panel (BETTING phase) ────────────────────────

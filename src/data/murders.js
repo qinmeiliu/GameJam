@@ -7,15 +7,28 @@ const MURDER_DATA = {
   // ── SUSPECT ROSTER (pool the lobby picks from to fill chairs) ─
   // Kept on the field `victims` for legacy compatibility — every existing
   // reference is actually consuming this as the suspect pool.
+  //
+  // v0.5.1: each character has TWO traits, picked so the trait graph is an
+  // 8-cycle where every trait is shared by exactly two characters. A clue
+  // mentioning one trait narrows to 2 candidates, not 1. See GDD.
+  //
+  //   meticulous: Butler · Chef
+  //   pedantic:   Butler · Librarian
+  //   passionate: Chef · Mayor
+  //   shifty:     Mayor · Janitor
+  //   cryptic:    Janitor · Count
+  //   eccentric:  Count · Mime
+  //   theatrical: Mime · Duchess
+  //   snobby:     Duchess · Librarian
   victims: [
-    { id: 'butler',    name: 'The Butler',        trait: 'pompous',   color: 0x8866aa },
-    { id: 'chef',      name: 'The Chef',           trait: 'chaotic',   color: 0xff6644 },
-    { id: 'mayor',     name: 'The Mayor',          trait: 'cowardly',  color: 0x4488ff },
-    { id: 'janitor',   name: 'The Janitor',        trait: 'cryptic',   color: 0x44cc88 },
-    { id: 'count',     name: 'Count Rubberduck',   trait: 'eccentric', color: 0xffcc00 },
-    { id: 'mime',      name: 'The Mime',           trait: 'silent',    color: 0xffffff },
-    { id: 'duchess',   name: 'The Duchess',        trait: 'dramatic',  color: 0xff44aa },
-    { id: 'librarian', name: 'The Librarian',      trait: 'pedantic',  color: 0x44ffcc },
+    { id: 'butler',    name: 'The Butler',        traits: ['meticulous', 'pedantic'],   color: 0x8866aa },
+    { id: 'chef',      name: 'The Chef',           traits: ['meticulous', 'passionate'], color: 0xff6644 },
+    { id: 'mayor',     name: 'The Mayor',          traits: ['passionate', 'shifty'],     color: 0x4488ff },
+    { id: 'janitor',   name: 'The Janitor',        traits: ['shifty', 'cryptic'],        color: 0x44cc88 },
+    { id: 'count',     name: 'Count Rubberduck',   traits: ['cryptic', 'eccentric'],     color: 0xffcc00 },
+    { id: 'mime',      name: 'The Mime',           traits: ['eccentric', 'theatrical'],  color: 0xffffff },
+    { id: 'duchess',   name: 'The Duchess',        traits: ['theatrical', 'snobby'],     color: 0xff44aa },
+    { id: 'librarian', name: 'The Librarian',      traits: ['snobby', 'pedantic'],       color: 0x44ffcc },
   ],
 
   // ── VICTIM ROSTER (dead bodies — pompous duck aristocrats) ──
@@ -89,24 +102,58 @@ const MURDER_DATA = {
   ],
 
   // Quote templates — fn(weapon, motive) or fn()
+  // v0.5: expanded pools. Killers/non-killers can both roll into guilty/sus
+  // (see RoundController), so neither tier is a giveaway anymore.
   quoteTemplates: {
     guilty: [
+      // Original 4
       (w) => `"${w} was self-defence, I swear! They started it!"`,
       (w) => `"Okay yes, ${w} was in my hand — but I was using it for COOKING."`,
       (w) => `"${w}? Never seen it. Definitely not mine. Stop looking at me."`,
       (w) => `"I tripped and ${w} flew out of my pocket. Total coincidence."`,
+      // v0.5 additions (8)
+      (w) => `"${w} is self-cleaning. I was just HELPING. That's not a crime, that's a chore."`,
+      (w) => `"Yes, I had ${w}. It was a present. To me. From me. It's a phase."`,
+      (w) => `"${w}? Yeah, I picked it up — to RETURN it. I was being POLITE."`,
+      (w) => `"Lots of people have access to ${w}. I just happened to be standing here. Holding it. In a stabby way. Coincidentally."`,
+      (w) => `"${w} jumped into my pocket. I have witnesses. Imaginary ones. But still witnesses."`,
+      (w) => `"I was DEMONSTRATING ${w}. Educationally. To the victim. They learned a lot."`,
+      (w) => `"I confess: I've used ${w}. To open mail. I am not a mail-murderer."`,
+      (w) => `"If anything, ${w} attacked the victim. I was merely standing nearby. Holding it. By accident."`,
     ],
     sus: [
+      // Original 4
       ()  => `"I wasn't there. I was teaching my goldfish to yodel."`,
       ()  => `"You can't prove anything. Also I want a lawyer. What is a lawyer."`,
       ()  => `"I was home alone. With seventeen witnesses. Who've left the country."`,
       ()  => `"I was refolding my napkin collection. Very time-consuming. Ask anyone."`,
+      // v0.5 additions (10)
+      ()  => `"I was practicing my surprised face. In the mirror. For three hours. Genuinely surprised every time."`,
+      ()  => `"I was at the dentist. My own dentist. I'm my own dentist. It's empowering."`,
+      ()  => `"My alibi is on a USB stick. The stick is also missing. Suspicious timing on TWO things now."`,
+      ()  => `"I was negotiating with a squirrel. We have a treaty. The squirrel can confirm. Probably."`,
+      ()  => `"I was absorbing the wallpaper's secrets. Long story. The wallpaper KNOWS things."`,
+      ()  => `"I was at the Quiet Club. Nobody talks there. So no witnesses, technically. Convenient."`,
+      ()  => `"I had an alibi. I traded it for a sandwich. The sandwich was unreal."`,
+      ()  => `"I was learning to whistle backwards. It involves so much saliva. Inadmissible."`,
+      ()  => `"Someone framed me. With a literal picture frame. It's in my pocket. Don't ask why."`,
+      ()  => `"I was hiding from my reflection. We had a disagreement. About hats."`,
     ],
     clueless: [
+      // Original 4
       ()  => `"Wait, who died? Is there free cake? Someone mentioned cake."`,
       ()  => `"I just got here. What's happening. Is this about THE thing?"`,
       ()  => `"Murder? On a Tuesday? That seems rude."`,
       ()  => `"I didn't even know they were dead. I thought they were just quiet."`,
+      // v0.5 additions (8)
+      ()  => `"Were we supposed to look at the body? I was avoiding eye contact. Out of respect."`,
+      ()  => `"Is this bingo night? I was told there'd be bingo. Where's bingo."`,
+      ()  => `"I assumed everyone was napping aggressively. My bad."`,
+      ()  => `"Are we SURE they're dead? Have we tried tickling them?"`,
+      ()  => `"I lost track of time. And space. And the victim. Three losses, actually."`,
+      ()  => `"Wait, this is REAL? I thought we were doing murder-mystery improv. My bad."`,
+      ()  => `"I just realised I'm not wearing pants. Is that more relevant than the murder?"`,
+      ()  => `"Who? When? Where? I have so many questions and ZERO useful answers."`,
     ],
   },
 
@@ -162,23 +209,29 @@ const MURDER_DATA = {
   //  from noise before buying.
   // ──────────────────────────────────────────────────────────
   clueTemplates: [
-    // ── Reliable (4): hint at killer's actual trait ────────
+    // ── Reliable (6): hint at killer's actual trait ────────
     { tier: 'reliable',   text: 'Ducky found {object}. The killer reeks of {killerTrait} energy.' },
     { tier: 'reliable',   text: 'Ducky discovered {object} near the {weapon}. Whoever swung it was unmistakably {killerTrait}.' },
     { tier: 'reliable',   text: "The body's posture screams {killerTrait}. Ducky takes notes, suspiciously." },
     { tier: 'reliable',   text: 'Ducky inspects {object}. The killer left a fingerprint of {killerTrait} energy on it.' },
+    { tier: 'reliable',   text: 'Ducky sniffs {object} deeply. There is a faint {killerTrait} scent. Suspicious.' },
+    { tier: 'reliable',   text: 'The handwriting on {object} is unmistakably {killerTrait} in nature. Ducky frowns.' },
 
-    // ── Misleading (4): hint at a random NON-killer trait ──
+    // ── Misleading (6): hint at a random NON-killer trait ──
     { tier: 'misleading', text: 'Ducky pegs the killer as someone {randomTrait}, possibly. Or maybe not.' },
     { tier: 'misleading', text: 'Whoever did this had {randomTrait} vibes — or so the napkins say.' },
     { tier: 'misleading', text: "Ducky overheard a whisper: '{randomTrait} types are always the worst.'" },
     { tier: 'misleading', text: 'The crime scene smells faintly of {randomTrait} ambition. Or gravy. Hard to tell.' },
+    { tier: 'misleading', text: "Ducky's witness — a pigeon — describes the killer as 'very {randomTrait}'. Take that as you will." },
+    { tier: 'misleading', text: "Ducky's gut says the most {randomTrait} one did it. Ducky's gut is wrong 73% of the time." },
 
-    // ── Flavor (4): no info value, pure chaos ──────────────
+    // ── Flavor (6): no info value, pure chaos ──────────────
     { tier: 'flavor',     text: 'Ducky found {object}. Quack. That is the entire clue.' },
     { tier: 'flavor',     text: 'Ducky discovered {object}. The motive — {motive} — feels personal.' },
     { tier: 'flavor',     text: 'Ducky noticed the {weapon} was held clumsily. Typical for murderers.' },
     { tier: 'flavor',     text: 'A second {object} appeared, identical to the first. Ducky is unsettled.' },
+    { tier: 'flavor',     text: 'Ducky stepped on {object} and quack-screamed. Investigation no further forward.' },
+    { tier: 'flavor',     text: "{object} is present. Air is also present. Ducky takes meticulous notes about the air." },
   ],
 
 };

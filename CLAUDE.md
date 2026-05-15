@@ -20,7 +20,7 @@
 
 1. **30/70 Chaos** — the murder is not solvable. Clues are misdirection. Trust scores are cosmetic. Killer is pure equal-weight RNG.
 2. **Non-linear risk curve** — suspect counts have different RTPs (3→90%, 4→94%, 5→96%, 6→100% on no-clue plays). Players pick their volatility profile, not just their stakes.
-3. **Clue Market** — clues are purchaseable, not auto-revealed. First clue = 10% of bet, second = 20%. Skipping all clues earns a ×1.20 No-Clue Bonus. Clues never name the killer.
+3. **Clue Market** — clues are purchaseable, not auto-revealed. First clue = 10% of bet, second = 20%. Skipping all clues earns a ×1.20 No-Clue Bonus. Clues never name the killer. Trait-based clues narrow the field to **two** candidates (v0.5.1 8-cycle overlap), never to one.
 4. **Two-sub-phase betting** — BETTING phase shows the case file (open-ended, no timer); player places bet → ACCUSE phase (30s timed): suspects revealed with quotes, folder burns, player must accuse. Action cards deferred post-MVP.
 5. **Dual Accusation** — wrong Accusation #1 → innocent dramatically executed, second-chance window opens (15s, clue market frozen, no new clue buys). Acc#2 correct = ×0.30 of gross (down from v0.4's 0.40).
 6. **Glow-Fi Neo-Vector art** — Flood Black base (`#05050a`), Cyan/Magenta/Gold accents, dot-matrix Linear GFX, Hex Holding Devices, every element glows.

@@ -80,14 +80,29 @@ class RoundController {
       return fn(weaponName, motive);
     };
 
+    // v0.5: quote-type rolls no longer give away who the killer is.
+    //   Killer  → 60% guilty / 40% sus     (sometimes acts shifty without confessing)
+    //   Other   → 20% guilty / 40% sus / 40% clueless  (innocents can sound guilty too)
+    // Result: a "guilty" quote is no longer a smoking gun — it could be any suspect.
+    const rollQuoteType = (isKiller) => {
+      const r = Math.random();
+      if (isKiller) {
+        return r < 0.60 ? 'guilty' : 'sus';
+      }
+      if (r < 0.20) return 'guilty';
+      if (r < 0.60) return 'sus';
+      return 'clueless';
+    };
+
     this.suspects = shuffled.map((s, i) => {
       const isKiller  = (i === this.killerIdx);
-      const quoteType = isKiller ? 'guilty' : (Math.random() < 0.5 ? 'sus' : 'clueless');
+      const quoteType = rollQuoteType(isKiller);
       return {
         id:      s.id,
         name:    s.name,
         color:   s.color,
-        trait:   s.trait,
+        traits:  s.traits || [s.trait],   // v0.5.1: array (2 traits per character)
+        trait:   (s.traits && s.traits[0]) || s.trait,  // legacy compat — first trait
         alibi:   pickUniqueQuote(quoteType),
         quoteType,
         trustScore: 35 + Math.floor(Math.random() * 40),
@@ -106,20 +121,28 @@ class RoundController {
     this.motive      = motive;
 
     // ── v0.5: CLUE MARKET ────────────────────────────────────
-    // Pick two random clue templates from the 12-template pool. Bind the
+    // Pick two random clue templates from the 18-template pool. Bind the
     // {placeholder} variables with round data. Templates never name the
     // killer; they only hint at trait, weapon, motive, or pure flavor.
     const objectPool = this._shuffle([...d.clueEvents]);
     const templatePool = this._shuffle([...d.clueTemplates]).slice(0, 2);
-    const killerTrait = this.suspects[this.killerIdx].trait;
 
-    // Random NON-killer trait pool — used by 'misleading' templates so the
-    // player thinks they're learning something but they're actually being
-    // sent in the wrong direction.
+    // v0.5.1: each suspect has TWO traits. Reliable clues pick ONE of the
+    // killer's two traits at random. The trait will also be shared by one
+    // other suspect (per the 8-cycle design), so the player narrows to 2.
+    const killerTraitList = this.suspects[this.killerIdx].traits || [this.suspects[this.killerIdx].trait];
+    const killerTrait = killerTraitList[Math.floor(Math.random() * killerTraitList.length)];
+
+    // Misleading clues pick a random trait from a random non-killer. May
+    // coincidentally land on a trait the killer also has (one of the killer's
+    // two) — in which case the "misleading" clue is accidentally reliable.
+    // The player can't tell signal from noise. Intentional chaos.
     const innocents = this.suspects.filter((_, i) => i !== this.killerIdx);
     const pickRandomTrait = () => {
       if (innocents.length === 0) return killerTrait;
-      return innocents[Math.floor(Math.random() * innocents.length)].trait;
+      const inn = innocents[Math.floor(Math.random() * innocents.length)];
+      const list = inn.traits || [inn.trait];
+      return list[Math.floor(Math.random() * list.length)];
     };
 
     this.clues = templatePool.map((tpl, i) => {

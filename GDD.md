@@ -193,7 +193,23 @@ v0.4's clues had two problems: they spoiled the killer by name, and they auto-re
 
 Each round, RoundController picks 2 templates randomly. The pool is intentionally split between **reliable, misleading, and pure flavor** so the player has no way to know in advance whether a clue is signal or noise.
 
-**Reliable (4 templates) — hint at the killer's actual trait:**
+### Trait system (v0.5.1)
+Each suspect has **two traits** in an 8-cycle overlap pattern. Every trait points to exactly two characters, so a "reliable" clue narrows the field to two candidates, never to one:
+
+| Trait | Suspect A | Suspect B |
+|---|---|---|
+| meticulous | Butler | Chef |
+| pedantic | Butler | Librarian |
+| passionate | Chef | Mayor |
+| shifty | Mayor | Janitor |
+| cryptic | Janitor | Count Rubberduck |
+| eccentric | Count Rubberduck | Mime |
+| theatrical | Mime | Duchess |
+| snobby | Duchess | Librarian |
+
+When a reliable clue fires, RoundController picks one of the killer's two traits at random. When a misleading clue fires, it pulls a random trait from a random non-killer — which may accidentally land on a trait the killer also carries. The player has no way to distinguish signal from noise.
+
+**Reliable (6 templates) — hint at one of the killer's two traits:**
 - "Ducky found {object}. The killer reeks of {killerTrait}."
 - "Ducky discovered {object} near the {weapon}. Whoever swung it was {killerTrait}."
 - "The body's posture suggests someone {killerTrait}. Ducky takes notes."

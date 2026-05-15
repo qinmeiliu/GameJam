@@ -26,6 +26,7 @@ class RoundController {
     this._chaosRoll     = null;    // CHAOS_ROLL: random 0.5-3.0 factor rolled when activated
     this._earlyBird     = false;   // true if bet was locked while folder > 60%
     this._cashedOut     = false;   // CASH_OUT short-circuits the reveal
+    this._lockedBet     = 0;       // bet amount snapshot at confirm time — drives clue costs
 
     this._generate();
   }
@@ -178,7 +179,12 @@ class RoundController {
   getClueCost(bet) {
     const isFirst = this.cluesPurchased === 0;
     const frac = isFirst ? VI.GAME.CLUE_COST_FIRST_FRAC : VI.GAME.CLUE_COST_SECOND_FRAC;
-    return Math.max(1, Math.round(bet * frac));
+    // Prefer the bet that was snapshotted at confirm time. The argument is
+    // a fallback for callers that don't have access to the locked value
+    // (or for early renders before bet is confirmed — those should still
+    // show a reasonable number).
+    const effectiveBet = (this._lockedBet > 0) ? this._lockedBet : (bet || 0);
+    return Math.max(1, Math.round(effectiveBet * frac));
   }
 
   /**
@@ -203,12 +209,17 @@ class RoundController {
   // ── Bet lock-in (drives Early Bird bonus) ─────────────────
 
   /**
-   * Called by GameScene when the player confirms a bet. Records whether
-   * the bet was placed while the folder was still > 60% integrity, which
-   * is the GDD trigger for the +15% Early Bird bonus.
+   * Called by GameScene when the player confirms a bet. Records:
+   *  - Early Bird eligibility (bet locked while folder > 60%)
+   *  - The bet amount itself, used by getClueCost so the cost calc doesn't
+   *    depend on the caller passing the bet correctly every time. Avoids
+   *    bugs where stale scene state caused clue prices to always show $1.
    */
-  registerBetLock(folderPct) {
+  registerBetLock(folderPct, bet) {
     this._earlyBird = folderPct > 0.60;
+    if (typeof bet === 'number' && bet > 0) {
+      this._lockedBet = bet;
+    }
   }
 
   // ── Payout (GDD v0.4 canonical formula) ───────────────────

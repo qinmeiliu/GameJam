@@ -1232,7 +1232,9 @@ class GameScene extends Phaser.Scene {
     });
 
     if (this.gs.round && this.gs.round.registerBetLock) {
-      this.gs.round.registerBetLock(this._folderPct);
+      // Pass `amt` explicitly so the round controller owns its own snapshot
+      // of the bet — clue cost reads it from there, not from scene state.
+      this.gs.round.registerBetLock(this._folderPct, amt);
     }
     const eb = (this._folderPct > 0.60) ? '  ★ EARLY BIRD +15%' : '';
     this._addClue(`💰 Bet placed: $${amt} (balance now $${this.gs.balance.toLocaleString()})${eb}`, VI.HEX.VI_AMBER);

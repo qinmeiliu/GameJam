@@ -16,6 +16,23 @@ class UIScene extends Phaser.Scene {
     this._accumulatedBet = 0;
     this._gs           = null;  // set in create() after GameScene is running
     this._actionCooldown = false;
+
+    // ── CRITICAL: null out every instance ref that's populated under an
+    //    "if (!this._xxx)" guard. Phaser reuses scene instances across
+    //    scene.start() restarts, so these references survive shutdown as
+    //    pointers to *destroyed* GameObjects. If create() then sees the
+    //    truthy old ref it skips recreation, and later setVisible/setText
+    //    calls hit a dead object and break round flow (this is the
+    //    "stuck after Lobby return" bug).
+    this._betText            = null;
+    this._betBuilderRefs     = null;
+    this._chipObjs           = null;
+    this._accuseRefs         = null;
+    this._accusePulse        = null;
+    this._actionCards        = null;
+    this._suspectHeader      = null;
+    this._suspectLabel       = null;
+    this._toastY             = 130;
   }
 
   create() {
@@ -146,8 +163,9 @@ class UIScene extends Phaser.Scene {
     tg.lineStyle(1, VI.COLORS.CYAN, 0.2);
     tg.strokeRoundedRect(startX - 24, cy - 26, tw, 52, 26);
 
-    if (!this._betBuilderRefs) this._betBuilderRefs = [];
-    this._betBuilderRefs.push(tg);
+    // Always start fresh — never re-use across scene restarts (the previous
+    // array could hold pointers to destroyed Phaser objects).
+    this._betBuilderRefs = [tg];
 
     this._chipObjs = {};
     chips.forEach((value, i) => {
@@ -253,7 +271,8 @@ class UIScene extends Phaser.Scene {
       this._showToast(`Bet confirmed: $${this._currentBet}`, VI.HEX.VI_AMBER, 900);
     });
 
-    // Track every bet-builder element so we can show/hide as a group
+    // Track every bet-builder element so we can show/hide as a group.
+    // _buildChipTray already initialised the array; we just append here.
     if (!this._betBuilderRefs) this._betBuilderRefs = [];
     this._betBuilderRefs.push(lbl, this._betText, clrTxt, clrZone, cfG, cfLbl, cfZone);
   }
@@ -410,9 +429,14 @@ class UIScene extends Phaser.Scene {
   // Hide the suspect label whenever a fresh round begins — otherwise the
   // last suspect from the previous round stays pinned to the bottom-left.
   _clearSuspectLabel() {
-    if (this._suspectHeader) this._suspectHeader.setVisible(false);
-    if (this._suspectLabel)  this._suspectLabel.setVisible(false);
-    if (this._suspectLabel)  this._suspectLabel.setText('—');
+    // Wrap in try/catch — if a stale destroyed Text from a previous
+    // scene instance ever slips through (shouldn't happen now that
+    // init() nulls these, but belt-and-suspenders), don't crash
+    // round-start handling.
+    try {
+      if (this._suspectHeader && this._suspectHeader.scene) this._suspectHeader.setVisible(false);
+      if (this._suspectLabel  && this._suspectLabel.scene)  this._suspectLabel.setVisible(false).setText('—');
+    } catch (e) { /* swallow */ }
   }
 
   // ── Event handlers ─────────────────────────────────────────

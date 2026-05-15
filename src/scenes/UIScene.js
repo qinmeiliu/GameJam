@@ -369,7 +369,7 @@ class UIScene extends Phaser.Scene {
     const zone = this.add.zone(bx, by, bw, bh).setInteractive({ cursor: 'pointer' });
     zone.on('pointerover',  () => { _draw(true);  lbl.setColor('#ffffff'); });
     zone.on('pointerout',   () => { _draw(false); lbl.setColor(VI.HEX.GOLD); });
-    zone.on('pointerdown',  () => this.cameras.main.flash(80, 253, 0, 80, false));
+    // (No screen-wide flash on ACCUSE — the magenta hover state is enough.)
     zone.on('pointerup', () => {
       const gs = this._gs;
       if (!gs) return;

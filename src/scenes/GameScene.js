@@ -70,11 +70,13 @@ class GameScene extends Phaser.Scene {
     this.events.on('ui:accuse',         ()    => this._onAccuse());
     this.events.on('ui:action_card',    (id)  => this._onActionCard(id));
 
-    // ESC → menu
+    // ESC → menu. Stop both running scenes explicitly so they don't leak
+    // listeners or stale state into the next Menu → Lobby → GameScene cycle.
     this.input.keyboard.on('keydown-ESC', () => {
       this._stopTimer();
       this.scene.stop('UIScene');
       this.scene.start('MenuScene');
+      this.scene.stop('GameScene');
     });
 
     // Destruction cleanup
@@ -863,6 +865,11 @@ class GameScene extends Phaser.Scene {
   _buildBackToLobbyButton() {
     const x = 24, y = 102;            // top-left, just below the case header bar
     const bw = 130, bh = 32;
+    // Extra hit padding around the visual rect — the visible button sits
+    // in the same vertical band where suspect zones eventually appear, and
+    // those zones (default depth 0) used to swallow clicks. We give the
+    // back button a high depth AND a slightly larger hit zone for forgiveness.
+    const hitPadX = 10, hitPadY = 10;
 
     const g = this.add.graphics();
     const drawNormal = () => {
@@ -886,16 +893,29 @@ class GameScene extends Phaser.Scene {
       color: VI.HEX.CYAN, letterSpacing: 4,
     }).setOrigin(0.5);
 
-    const zone = this.add.zone(x + bw / 2, y + bh / 2, bw, bh).setInteractive({ cursor: 'pointer' });
+    const zone = this.add.zone(
+      x + bw / 2, y + bh / 2,
+      bw + hitPadX * 2, bh + hitPadY * 2,
+    ).setInteractive({ cursor: 'pointer' });
     zone.on('pointerover', () => { drawHover();  lbl.setColor(VI.HEX.GOLD); });
     zone.on('pointerout',  () => { drawNormal(); lbl.setColor(VI.HEX.CYAN); });
     zone.on('pointerup', () => {
-      // Tear down the timer + UI scene cleanly, then back to Lobby with
-      // the current balance carried over.
+      // Clean transition back to Lobby. Stop UIScene AND GameScene
+      // explicitly — `scene.start('LobbyScene')` alone leaves GameScene
+      // running in the background, which causes flow weirdness when the
+      // player later returns and starts a fresh game.
+      const balance = this.gs.balance;
       this._stopTimer();
       this.scene.stop('UIScene');
-      this.scene.start('LobbyScene', { balance: this.gs.balance });
+      this.scene.start('LobbyScene', { balance });
+      this.scene.stop('GameScene');
     });
+
+    // Render above suspect tokens (default depth 0) so clicks in the
+    // overlap zone (y=110-134) actually land on the back button.
+    g.setDepth(50);
+    lbl.setDepth(51);
+    zone.setDepth(52);
 
     this._backBtnRefs = [g, lbl, zone];
     this._setBackButtonVisible(false);  // hidden until BETTING enter

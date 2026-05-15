@@ -75,7 +75,6 @@ class MenuScene extends Phaser.Scene {
   _startGame() {
     if (this._launched) return;
     this._launched = true;
-    this.cameras.main.flash(200, 253, 224, 84, false);
     this.scene.start('LobbyScene', { balance: VI.GAME.DEFAULT_BALANCE });
   }
 
@@ -169,7 +168,7 @@ class MenuScene extends Phaser.Scene {
     const zone = this.add.zone(x, y, bw, bh).setInteractive({ cursor: 'pointer' });
     zone.on('pointerover',  () => { drawHover();  text.setColor('#ffffff'); });
     zone.on('pointerout',   () => { drawNormal(); text.setColor(VI.HEX.GOLD); });
-    zone.on('pointerdown',  () => this.cameras.main.flash(200, 253, 224, 84, false));
+    // (No screen flash on pointerdown — too jarring across scene transitions)
     zone.on('pointerup',    callback);
   }
 

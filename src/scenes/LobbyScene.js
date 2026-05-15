@@ -160,23 +160,26 @@ class LobbyScene extends Phaser.Scene {
     if (this._launching) return;
     this._launching = true;
 
-    // Big celebratory flash on the table area, then transition
+    // Localized gold-ring burst on the table — no full-screen camera flash
+    // (the screen-wide gold flash on every transition was distracting).
     const tx = this._tableCenterX();
     const ty = this._tableCenterY();
     const burst = this.add.graphics();
-    burst.fillStyle(VI.COLORS.GOLD, 0.6);
+    burst.fillStyle(VI.COLORS.GOLD, 0.45);
     burst.fillCircle(tx, ty, this._tableRadius());
     this.tweens.add({
       targets: burst,
-      alpha: { from: 0.6, to: 0 },
+      alpha: { from: 0.45, to: 0 },
       scale: { from: 1, to: 1.4 },
       duration: 360, ease: 'Cubic.easeOut',
       onComplete: () => burst.destroy(),
     });
 
-    this.cameras.main.flash(220, 253, 224, 84, false);
-
     this.time.delayedCall(260, () => {
+      // Defensive: stop any leftover GameScene/UIScene (e.g. after the
+      // player hit ← LOBBY from a running round) before relaunching them.
+      this.scene.stop('GameScene');
+      this.scene.stop('UIScene');
       this.scene.start('GameScene', {
         balance:      this._balance,
         suspectCount: this._suspectCount(),

@@ -33,6 +33,14 @@ class GameScene extends Phaser.Scene {
     this._burnMultiplier  = 1;     // PRESS sets this to 3
     this._suspectLockedByAction = false;  // DOUBLE_DOWN locks suspect choice
     this._phaseTimers     = [];    // active delayedCall handles per phase (cleared on exit)
+
+    // Null out scene-owned game objects so we don't carry stale refs to
+    // destroyed Phaser objects from a previous scene instance (we hit
+    // this bug class in UIScene — same precaution here).
+    this._folderBarG      = null;
+    this._folderFlame     = null;
+    this._emberEmitter    = null;
+    this._folderLabel     = null;
   }
 
   create() {
@@ -83,7 +91,11 @@ class GameScene extends Phaser.Scene {
     this.events.once('shutdown', () => this._stopTimer());
   }
 
-  update() { /* burn driven by time events */ }
+  update(time) {
+    // Animated wobbling flame at the folder-burn edge. Burn math itself
+    // is still driven by the 250ms _burnTick — this is purely visual.
+    this._drawFolderFlame(time);
+  }
 
   // ── Round setup ────────────────────────────────────────────
 
@@ -464,13 +476,45 @@ class GameScene extends Phaser.Scene {
   _buildFolderBar() {
     const { width } = this.scale;
     const by = 84, bh = 10;
+
+    // Track (dark base)
     const track = this.add.graphics();
     track.fillStyle(VI.COLORS.PANEL_SURFACE, 1);
     track.fillRect(0, by, width, bh);
+
+    // Filled portion + sheen
     this._folderBarG  = this.add.graphics();
+
+    // Vector flame at the burning edge — wobbles per frame
+    this._folderFlame = this.add.graphics();
+    this._folderFlame.setDepth(20);
+
+    // Ember particle texture (generated once at scene start)
+    if (!this.textures.exists('emberDot')) {
+      const g = this.make.graphics({ x: 0, y: 0, add: false });
+      g.fillStyle(0xffffff, 1);
+      g.fillCircle(3, 3, 3);
+      g.generateTexture('emberDot', 6, 6);
+      g.destroy();
+    }
+
+    // Ember emitter at the burning edge. Phaser auto-cleans on scene shutdown.
+    this._emberEmitter = this.add.particles(0, by + bh / 2, 'emberDot', {
+      speed:    { min: 30, max: 80 },
+      angle:    { min: -110, max: -70 },   // mostly upward, slight spread
+      scale:    { start: 0.7, end: 0 },
+      alpha:    { start: 1, end: 0 },
+      lifespan: 700,
+      frequency: -1,                       // dormant until ACCUSE starts
+      tint:     [0xff5500, 0xff9900, 0xfde054],
+      blendMode: 'ADD',
+    });
+    this._emberEmitter.setDepth(21);
+
     this._folderLabel = this.add.text(width / 2, by + bh / 2, 'FOLDER INTEGRITY  100%', {
       fontFamily: VI.FONTS.MONO, fontSize: '9px', color: VI.HEX.CYAN, alpha: 0.5,
     }).setOrigin(0.5);
+
     this._refreshFolderBar();
   }
 
@@ -478,15 +522,85 @@ class GameScene extends Phaser.Scene {
     const { width } = this.scale;
     const pct = this._folderPct != null ? this._folderPct : 1.0;
     const by  = 84, bh = 10;
-    const col = pct > 0.6 ? VI.COLORS.CYAN : pct > 0.3 ? VI.COLORS.VI_ORANGE : VI.COLORS.VI_RED;
 
+    // Bar color shifts as integrity drains. 3 stages: healthy → warm → critical.
+    const col  = pct > 0.6 ? VI.COLORS.CYAN : pct > 0.3 ? VI.COLORS.VI_ORANGE : VI.COLORS.VI_RED;
+    const lcol = pct > 0.6 ? VI.HEX.CYAN    : pct > 0.3 ? VI.HEX.VI_ORANGE    : VI.HEX.VI_RED;
+
+    // Filled portion + top sheen for "wet" highlight
+    const filledW = Math.max(0, width * pct);
     this._folderBarG.clear();
     this._folderBarG.fillStyle(col, 0.85);
-    this._folderBarG.fillRect(0, by, width * pct, bh);
+    this._folderBarG.fillRect(0, by, filledW, bh);
+    this._folderBarG.fillStyle(0xffffff, 0.18);
+    this._folderBarG.fillRect(0, by, filledW, 2);
 
-    const lcol = pct > 0.6 ? VI.HEX.CYAN : pct > 0.3 ? VI.HEX.VI_ORANGE : VI.HEX.VI_RED;
+    // Configure particle emitter intensity per stage. Disabled while at 100%
+    // (folder hasn't ignited) and during SCOREBOARD.
+    if (this._emberEmitter) {
+      const burning = pct < 1.0 && this.gs && this.gs.phase !== VI.PHASES.SCOREBOARD;
+      if (burning) {
+        // More embers as the folder approaches the floor — casino-slot lively
+        const freq = pct > 0.6 ? 140 : pct > 0.3 ? 80 : 40;
+        this._emberEmitter.setFrequency(freq);
+        this._emberEmitter.setPosition(filledW, by + bh / 2);
+      } else {
+        this._emberEmitter.setFrequency(-1);   // dormant
+      }
+    }
+
     this._folderLabel.setText(`FOLDER INTEGRITY  ${Math.round(pct * 100)}%`).setColor(lcol);
     this._updateTimerText();
+  }
+
+  // Animated wobbling flame at the burning edge. Called from update() at
+  // ~30Hz so the flame always feels alive (independent of the 250ms burn tick).
+  _drawFolderFlame(now) {
+    if (!this._folderFlame) return;
+    const { width } = this.scale;
+    const pct = this._folderPct != null ? this._folderPct : 1.0;
+    const by  = 84, bh = 10;
+    this._folderFlame.clear();
+
+    // Only render flame when folder is actively burning (ACCUSE / SECOND_CHANCE)
+    const burning = pct < 1.0 && this.gs && this.gs.phase !== VI.PHASES.SCOREBOARD;
+    if (!burning) return;
+
+    const edgeX  = width * pct;
+    const t      = now * 0.008;
+    const stage  = pct > 0.6 ? 0.7 : pct > 0.3 ? 1.0 : 1.4;   // taller flames at low integrity
+    const flameW = 16;
+    const flameH = 18 * stage;
+
+    // Outer flame — dark red, broadest base
+    this._folderFlame.fillStyle(0xff2200, 0.75);
+    this._folderFlame.fillTriangle(
+      edgeX - flameW / 2,            by + bh,
+      edgeX + flameW / 2,            by + bh,
+      edgeX + Math.sin(t)     * 3,   by - flameH
+    );
+    // Middle flame — orange, swirls counter-phase
+    this._folderFlame.fillStyle(0xff8800, 0.85);
+    this._folderFlame.fillTriangle(
+      edgeX - flameW / 3,            by + bh,
+      edgeX + flameW / 3,            by + bh,
+      edgeX + Math.sin(t + 1) * 2,   by - flameH * 0.7
+    );
+    // Core flame — yellow-gold, smallest + brightest
+    this._folderFlame.fillStyle(VI.COLORS.GOLD, 1);
+    this._folderFlame.fillTriangle(
+      edgeX - flameW / 5,            by + bh,
+      edgeX + flameW / 5,            by + bh,
+      edgeX + Math.sin(t + 2) * 1.5, by - flameH * 0.4
+    );
+
+    // Bright dot at the very tip — the "ember crown"
+    this._folderFlame.fillStyle(0xffffff, 0.85);
+    this._folderFlame.fillCircle(
+      edgeX + Math.sin(t + 2) * 1.5,
+      by - flameH * 0.4 - 1,
+      1.5
+    );
   }
 
   // ── Suspects ───────────────────────────────────────────────

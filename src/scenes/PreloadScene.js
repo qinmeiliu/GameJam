@@ -11,33 +11,53 @@ class PreloadScene extends Phaser.Scene {
   preload() {
     this._buildLoadingBar();
 
-    // ── Ducky mascot ──────────────────────────────────────────
-    // this.load.image('ducky',          'assets/images/ducky/ducky-idle.png');
-    // this.load.image('ducky-win',      'assets/images/ducky/ducky-win.png');
-    // this.load.image('ducky-lose',     'assets/images/ducky/ducky-lose.png');
-    // this.load.spritesheet('ducky-anim', 'assets/images/ducky/ducky-sheet.png',
-    //   { frameWidth: 256, frameHeight: 256 });
+    // ──────────────────────────────────────────────────────────
+    //  ASSET PIPELINE — v0.5.3+ mixed art approach
+    //  Sprites for hero elements (Ducky, suspect portraits, victims).
+    //  Vector graphics for UI panels, HUD, decorative GFX.
+    //
+    //  CONVENTION: each scene checks `this.textures.exists(key)` before
+    //  using a sprite. If absent, falls back to the vector graphics that
+    //  ship today. This lets art land incrementally without breaking play.
+    //
+    //  Drop files into the matching folder under assets/images/ and
+    //  un-comment the matching this.load.image() line below.
+    // ──────────────────────────────────────────────────────────
 
-    // ── UI ───────────────────────────────────────────────────
-    // this.load.image('logo',           'assets/images/ui/vi-logo.png');
-    // this.load.image('btn-primary',    'assets/images/ui/btn-primary.png');
-    // this.load.image('chip-1',         'assets/images/chips/chip-1.png');
-    // this.load.image('chip-5',         'assets/images/chips/chip-5.png');
-    // this.load.image('chip-25',        'assets/images/chips/chip-25.png');
-    // this.load.image('chip-100',       'assets/images/chips/chip-100.png');
+    // ── Ducky mascot (hero sprite) ───────────────────────────
+    // Expected sizes: idle ~256x256, expressions same size, transparent BG.
+    // this.load.image('ducky-idle',          'assets/images/ducky/ducky-idle.png');
+    // this.load.image('ducky-investigating', 'assets/images/ducky/ducky-investigating.png');
+    // this.load.image('ducky-pointing',      'assets/images/ducky/ducky-pointing.png');
+    // this.load.image('ducky-win',           'assets/images/ducky/ducky-win.png');
+    // this.load.image('ducky-lose',          'assets/images/ducky/ducky-lose.png');
 
-    // ── Backgrounds ──────────────────────────────────────────
-    // this.load.image('bg-menu',        'assets/images/backgrounds/menu-bg.jpg');
-    // this.load.image('bg-game',        'assets/images/backgrounds/game-bg.jpg');
+    // ── Suspect portraits (8 characters) ─────────────────────
+    // Expected: ~160x180 each, transparent BG, hex-friendly framing.
+    // this.load.image('suspect-butler',    'assets/images/suspects/butler.png');
+    // this.load.image('suspect-chef',      'assets/images/suspects/chef.png');
+    // this.load.image('suspect-mayor',     'assets/images/suspects/mayor.png');
+    // this.load.image('suspect-janitor',   'assets/images/suspects/janitor.png');
+    // this.load.image('suspect-count',     'assets/images/suspects/count.png');
+    // this.load.image('suspect-mime',      'assets/images/suspects/mime.png');
+    // this.load.image('suspect-duchess',   'assets/images/suspects/duchess.png');
+    // this.load.image('suspect-librarian', 'assets/images/suspects/librarian.png');
 
-    // ── Audio ────────────────────────────────────────────────
-    // this.load.audio('bgm-menu',       'assets/audio/bgm-menu.mp3');
-    // this.load.audio('sfx-win',        'assets/audio/sfx-win.mp3');
-    // this.load.audio('sfx-chip',       'assets/audio/sfx-chip.mp3');
-    // this.load.audio('sfx-click',      'assets/audio/sfx-click.mp3');
+    // ── Victim portraits (10 duck aristocrats) ──────────────
+    // Used in BETTING case-file panel. Expected ~200x200, transparent BG.
+    // this.load.image('victim-victor',     'assets/images/victims/victor.png');
+    // this.load.image('victim-quackton',   'assets/images/victims/quackton.png');
+    // ...etc.
 
-    // ── Fonts (if hosted locally) ─────────────────────────────
-    // this.load.script('webfont', 'https://ajax.googleapis.com/ajax/libs/webfont/1/webfont.js');
+    // ── Particle textures (procedural — generated at runtime) ─
+    // No file needed. GameScene generates 'emberDot' for folder-burn embers.
+
+    // ── Audio (future) ────────────────────────────────────────
+    // this.load.audio('sfx-folder-burn', 'assets/audio/sfx-folder-burn.mp3');
+    // this.load.audio('sfx-clue-buy',    'assets/audio/sfx-clue-buy.mp3');
+    // this.load.audio('sfx-accuse',      'assets/audio/sfx-accuse.mp3');
+    // this.load.audio('sfx-win-confetti','assets/audio/sfx-win-confetti.mp3');
+    // this.load.audio('sfx-cold-case',   'assets/audio/sfx-cold-case.mp3');
   }
 
   create() {

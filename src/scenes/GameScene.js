@@ -312,15 +312,52 @@ class GameScene extends Phaser.Scene {
       // will keep tweening this.g.alpha back to ~0.86 and fight the dim.
       if (wrongSpr.breathTween) { wrongSpr.breathTween.stop(); wrongSpr.breathTween = null; }
       this._clearSuspectSparkles(wrongSpr);
+
+      // Vacuum-suck execution: silhouette shrinks + spins toward the floor,
+      // hex + name slump down and dim. More dramatic than the old straight
+      // alpha fade and tells the player "this one is OUT, not just dimmed."
       this.tweens.add({
-        targets: [wrongSpr.g, wrongSpr.nameText, wrongSpr.silG],
-        alpha: 0.15, duration: 400,
+        targets: wrongSpr.silG,
+        scaleX: 0.25, scaleY: 0.25,
+        rotation: 0.45,
+        alpha: 0.10,
+        duration: 520, ease: 'Cubic.easeIn',
       });
+      this.tweens.add({
+        targets: [wrongSpr.g, wrongSpr.nameText],
+        alpha: 0.15,
+        y: '+=22',
+        duration: 520, ease: 'Cubic.easeIn',
+      });
+      // Magenta impact ring at the execution site — same helper used on
+      // the reveal landings, recolored to "guilty/wrong" magenta.
+      this._spawnHexImpact(wrongSpr.cx, wrongSpr.cy, wrongSpr.tokenR, VI.COLORS.MAGENTA);
+
       // Hide their quote bubble for good
       if (wrongSpr.bubbleG)    wrongSpr.bubbleG.setVisible(false);
       if (wrongSpr.bubbleText) wrongSpr.bubbleText.setVisible(false);
       wrongSpr.zone.disableInteractive();
     }
+
+    // Survivors get a brief "still in the running" tension pulse —
+    // a quick scale-up on the silhouette + impact ring in their own
+    // brand color, so the player's eye refocuses on who's left.
+    this._suspectSprites.forEach((s, i) => {
+      if (i === wrongIdx) return;
+      this.tweens.add({
+        targets: s.silG,
+        scaleX: { from: s.silG.scaleX * 1.18, to: s.silG.scaleX },
+        scaleY: { from: s.silG.scaleY * 1.18, to: s.silG.scaleY },
+        duration: 420, delay: 220 + i * 60,
+        ease: 'Back.Out',
+      });
+      // Re-impact ring fires shortly after the wrong-suspect drop so the
+      // "still alive" beat lands as the executed one is sinking.
+      this.time.delayedCall(220 + i * 60, () => {
+        if (this.gs.phase !== VI.PHASES.SECOND_CHANCE) return;  // bail if we already moved on
+        this._spawnHexImpact(s.cx, s.cy, s.tokenR, s.sus.color);
+      });
+    });
     this._addClue(`❌ WRONG! ${gs.round.suspects[wrongIdx].name} is innocent.`, VI.HEX.MAGENTA);
     this._addClue('🎲 SECOND CHANCE — folder burns 3× faster, 15s left!', VI.HEX.VI_ORANGE);
     this._addClue('🔒 Clue Market closed. Trust your gut.', VI.HEX.CYAN);
@@ -1098,10 +1135,13 @@ class GameScene extends Phaser.Scene {
       color: VI.HEX.GOLD, letterSpacing: 6,
       shadow: { blur: 8, color: VI.HEX.GOLD, fill: true },
     });
-    const caseNum = this.add.text(cx + pw/2 - 28, cy - ph/2 + 26, '#247', {
+    // Case number is randomized per round in _showCaseFile — start with a
+    // placeholder so the panel renders correctly before the first round lands.
+    this._cfCaseNum = this.add.text(cx + pw/2 - 28, cy - ph/2 + 26, '#000', {
       fontFamily: VI.FONTS.MONO, fontSize: '13px',
       color: VI.HEX.CYAN, alpha: 0.6,
     }).setOrigin(1, 0);
+    const caseNum = this._cfCaseNum;
 
     const sep = this.add.graphics();
     sep.lineStyle(1, VI.COLORS.CYAN, 0.4);
@@ -1169,6 +1209,12 @@ class GameScene extends Phaser.Scene {
       `in ${r.roomName}.`
     );
     this._cfMotive.setText(`MOTIVE  ·  ${r.motive.toUpperCase()}`);
+    // Fresh case number every round — 3-digit feels right for "case file" vibe,
+    // skipping 000 so the panel never reads "#000". Padded to 3 digits.
+    if (this._cfCaseNum) {
+      const n = 1 + Math.floor(Math.random() * 999);
+      this._cfCaseNum.setText('#' + String(n).padStart(3, '0'));
+    }
 
     // Staggered fade-in
     this._caseFileElements.forEach((e, i) => {
@@ -1472,6 +1518,7 @@ class GameScene extends Phaser.Scene {
   }
 
   _setClueMarketVisible(visible) {
+    const wasVisible = this._marketVisible;
     this._marketVisible = visible;
     // Panel chrome (background, title, no-clue indicator, separator)
     if (this._clueMarketChrome) {
@@ -1492,6 +1539,44 @@ class GameScene extends Phaser.Scene {
     if (visible) {
       if (this._clueCards) this._clueCards.forEach((_, i) => this._refreshClueCard(i));
       this._updateNoClueBonusIndicator();
+      // First-time-this-round entrance: drop the market in like the suspects.
+      if (!wasVisible) this._dropInClueMarket();
+    }
+  }
+
+  // Casino-slot drop for the Clue Market panel. Chrome lands first, then
+  // each card bounces down with a small stagger. Mirrors _revealSuspects.
+  _dropInClueMarket() {
+    const DROP        = 280;
+    const CHROME_MS   = 520;
+    const CARD_MS     = 540;
+    const CARD_DELAY  = 140;     // delay after chrome starts before first card drops
+
+    // Chrome (bg, title, no-clue lbl, separator) drops as one unit
+    if (this._clueMarketChrome && this._clueMarketChrome.length) {
+      this._clueMarketChrome.forEach(o => { if (o) o.y -= DROP; });
+      this.tweens.add({
+        targets: this._clueMarketChrome,
+        y: `+=${DROP}`,
+        duration: CHROME_MS,
+        ease: 'Bounce.Out',
+      });
+    }
+
+    // Each card drops as a unit with a slight per-card stagger
+    if (this._clueCards) {
+      this._clueCards.forEach((c, i) => {
+        const els = [c.bg, c.headerLbl, c.btnG, c.btnLbl, c.btnZone, c.clueText]
+          .filter(Boolean);
+        els.forEach(o => { o.y -= DROP; });
+        this.tweens.add({
+          targets: els,
+          y: `+=${DROP}`,
+          duration: CARD_MS,
+          delay: CARD_DELAY + i * 110,
+          ease: 'Bounce.Out',
+        });
+      });
     }
   }
 

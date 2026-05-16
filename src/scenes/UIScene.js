@@ -504,21 +504,35 @@ class UIScene extends Phaser.Scene {
     color    = color    || VI.HEX.CREAM;
     duration = duration || 1500;
 
+    // Slot-based vertical stack so back-to-back toasts (e.g. SECOND CHANCE
+    // banner + "Select a suspect first" error) don't paint on top of each
+    // other. Each new toast takes the lowest free slot; freed on cleanup.
+    if (!this._toastSlots) this._toastSlots = [];
+    let slot = 0;
+    while (this._toastSlots[slot]) slot++;
+    this._toastSlots[slot] = true;
+
+    const TOAST_GAP = 46;   // px between stacked toasts
+    const baseY = this._toastY + slot * TOAST_GAP;
+
     const { width } = this.scale;
-    const toast = this.add.text(width / 2, this._toastY, msg, {
+    const toast = this.add.text(width / 2, baseY, msg, {
       fontFamily: VI.FONTS.HEADING, fontSize: '28px',
       color, stroke: '#000000', strokeThickness: 4,
       shadow: { blur: 12, color, fill: true },
     }).setOrigin(0.5).setAlpha(0);
 
     this.tweens.add({
-      targets: toast, alpha: 1, y: this._toastY - 12,
+      targets: toast, alpha: 1, y: baseY - 12,
       duration: 280, ease: 'Back.Out',
       onComplete: () => {
         this.tweens.add({
-          targets: toast, alpha: 0, y: this._toastY - 36,
+          targets: toast, alpha: 0, y: baseY - 36,
           delay: duration, duration: 350, ease: 'Power2',
-          onComplete: () => toast.destroy(),
+          onComplete: () => {
+            toast.destroy();
+            this._toastSlots[slot] = false;
+          },
         });
       },
     });

@@ -49,6 +49,30 @@ class PreloadScene extends Phaser.Scene {
     // this.load.image('victim-quackton',   'assets/images/victims/quackton.png');
     // ...etc.
 
+    // ── Room backgrounds (12 neon-line-art rooms) ──────────────
+    // Texture key is `bg-<roomId>` where roomId matches MURDER_DATA.rooms[].id.
+    // Filenames differ from the keys for several rooms (the artist used longer
+    // names like bg-winecellar.png), so we keep an explicit roomId→filename
+    // mapping. Missing files fall back to the vector dot-matrix gracefully
+    // (GameScene checks textures.exists before swapping in).
+    const ROOM_BG_FILES = {
+      ballroom: 'bg-ballroom.png',
+      library:  'bg-library.png',
+      bedroom:  'bg-bedroom.png',
+      kitchen:  'bg-kitchen.png',
+      garden:   'bg-garden.png',
+      billiard: 'bg-billiard.png',
+      cellar:   'bg-winecellar.png',
+      trophy:   'bg-trophyroom.png',
+      passage:  'bg-secretpassage.png',
+      attic:    'bg-attic.png',
+      dining:   'bg-diningroom.png',
+      hottub:   'bg-hottub.png',
+    };
+    Object.keys(ROOM_BG_FILES).forEach((id) => {
+      this.load.image(`bg-${id}`, `assets/images/backgrounds/${ROOM_BG_FILES[id]}`);
+    });
+
     // ── Particle textures (procedural — generated at runtime) ─
     // No file needed. GameScene generates 'emberDot' for folder-burn embers.
 

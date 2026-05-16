@@ -156,6 +156,11 @@ class GameScene extends Phaser.Scene {
     this._clearClueFeed();
     this._resetClueMarket();          // reset clue cards + no-clue bonus indicator
 
+    // Swap the room background image to match this round's room. Crossfades
+    // from the previous round's room art; falls back to vector-only if the
+    // texture for this room isn't loaded.
+    this._setRoomBackground(gs.round.roomId);
+
     // Emit round start to UIScene
     this.events.emit('game:round_start', {
       balance:      gs.balance,
@@ -1911,9 +1916,23 @@ class GameScene extends Phaser.Scene {
   // ── Background & decoration ────────────────────────────────
   _drawBackground() {
     const { width, height } = this.scale;
+
+    // 1. Flood-black floor — always painted, hides whatever's behind.
+    const floor = this.add.graphics();
+    floor.fillStyle(VI.COLORS.FLOOD_BLACK, 1);
+    floor.fillRect(0, 0, width, height);
+
+    // 2. Per-room background image holder. Sits between the floor and the
+    //    Glow-Fi atmosphere overlay so the dot matrix + ellipses + arc still
+    //    paint ON TOP of the room art. Stays alpha=0 until _setRoomBackground
+    //    runs for the first round, then crossfades per round.
+    this._roomBg = this.add.image(width / 2, height / 2, '__DEFAULT');
+    this._roomBg.setDisplaySize(width, height);
+    this._roomBg.setAlpha(0);
+
+    // 3. Glow-Fi atmosphere — ellipses, dot matrix, arc. These overlay the
+    //    room art at low alpha to keep the brand's Neo-Vector signature.
     const bg = this.add.graphics();
-    bg.fillStyle(VI.COLORS.FLOOD_BLACK, 1);
-    bg.fillRect(0, 0, width, height);
     bg.fillStyle(VI.COLORS.CYAN, 0.03);
     bg.fillEllipse(width * 0.75, height * 0.3, 620, 420);
     bg.fillStyle(VI.COLORS.MAGENTA, 0.025);
@@ -1932,6 +1951,50 @@ class GameScene extends Phaser.Scene {
     arc.beginPath();
     arc.arc(width * 0.65, height * 1.2, 430, Phaser.Math.DegToRad(222), Phaser.Math.DegToRad(308));
     arc.strokePath();
+  }
+
+  // ── Per-room background ────────────────────────────────────
+  // Swap the bg image to match the round's room. Crossfades between rounds.
+  // If the texture for this room hasn't been loaded (any of 12 PNGs missing
+  // from disk), we silently fall back to the vector-only background — the
+  // game stays playable regardless.
+  _setRoomBackground(roomId) {
+    if (!this._roomBg) return;          // _drawBackground hasn't run yet
+    const key = `bg-${roomId}`;
+    if (!roomId || !this.textures.exists(key)) {
+      // Fade out any prior image, leaving the vector background alone.
+      this.tweens.killTweensOf(this._roomBg);
+      this.tweens.add({ targets: this._roomBg, alpha: 0, duration: 240 });
+      return;
+    }
+
+    const TARGET_ALPHA = 0.78;          // dim enough for UI to read, bright enough to feel "in the room"
+    const prev = this._roomBg.alpha;
+
+    // Mid-round swap → crossfade. First scene entry (prev≈0) → straight fade-in.
+    this.tweens.killTweensOf(this._roomBg);
+    if (prev > 0.05) {
+      this.tweens.add({
+        targets: this._roomBg,
+        alpha: 0,
+        duration: 260, ease: 'Cubic.easeIn',
+        onComplete: () => {
+          this._roomBg.setTexture(key);
+          this.tweens.add({
+            targets: this._roomBg,
+            alpha: TARGET_ALPHA,
+            duration: 380, ease: 'Cubic.easeOut',
+          });
+        },
+      });
+    } else {
+      this._roomBg.setTexture(key);
+      this.tweens.add({
+        targets: this._roomBg,
+        alpha: TARGET_ALPHA,
+        duration: 520, ease: 'Cubic.easeOut',
+      });
+    }
   }
 
   _drawMiniDucky(x, y) {

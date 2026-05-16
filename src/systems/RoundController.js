@@ -119,6 +119,8 @@ class RoundController {
     this.weaponName  = weaponName;
     this.weaponTier  = weaponTier;
     this.roomName    = room.name;
+    this.roomId      = room.id;        // texture key for `bg-<roomId>` lookups in GameScene
+    this.roomAccent  = room.accent;    // currently unused but plumbs the per-room accent color
     this.motive      = motive;
 
     // ── v0.5: CLUE MARKET ────────────────────────────────────

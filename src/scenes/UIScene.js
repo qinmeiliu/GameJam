@@ -33,6 +33,9 @@ class UIScene extends Phaser.Scene {
     this._suspectHeader      = null;
     this._suspectLabel       = null;
     this._toastY             = 130;
+    this._betStackChips      = null;   // physical chip pile next to the bet counter
+    this._betStackX          = 0;
+    this._betStackBaseY      = 0;
   }
 
   create() {
@@ -218,9 +221,147 @@ class UIScene extends Phaser.Scene {
       if (gs.gs.phase !== VI.PHASES.BETTING) return;
       this._accumulatedBet += value;
       this._refreshBetDisplay(this._accumulatedBet);
+      // Cosmetic — chip flies in an arc to the bet pile and lands.
+      this._spawnFlyingChip(x, y, value);
     });
 
     return { g, txt, zone };
+  }
+
+  // ── Bet-pile animations ────────────────────────────────────
+  // The bet pile is a *physical* chip stack rendered to the left of the bet
+  // counter. Every click in the tray spawns a flying mini-chip that arcs
+  // over the stage, lands on top of the pile, and triggers a tiny squash-
+  // and-stretch settle. The pile caps at 12 visible chips — older ones fade
+  // off the bottom (the bet text still tracks the truth).
+
+  _drawStackChip(x, y, value) {
+    // Same color mapping used by the tray, so a $1000 stack-chip is gold
+    // regardless of which method drew it.
+    const CHIP_COLORS = {
+      10:   0xffffff,
+      25:   0xff4444,
+      100:  0x44cc44,
+      500:  VI.COLORS.CYAN,
+      1000: VI.COLORS.GOLD,
+    };
+    const color = CHIP_COLORS[value] != null ? CHIP_COLORS[value] : VI.COLORS.VI_PURPLE;
+    const r = 13;
+    const g = this.add.graphics();
+    g.fillStyle(color, 0.35);
+    g.fillCircle(0, 0, r);
+    g.lineStyle(2, color, 1);
+    g.strokeCircle(0, 0, r);
+    g.lineStyle(1.5, color, 0.55);
+    // Six tiny dashes — small enough that they read as a casino chip from afar
+    for (let a = 0; a < 6; a++) {
+      const rad = Phaser.Math.DegToRad(a * 60);
+      g.lineBetween(Math.cos(rad) * 8, Math.sin(rad) * 8, Math.cos(rad) * r, Math.sin(rad) * r);
+    }
+    g.x = x;
+    g.y = y;
+    return g;
+  }
+
+  _spawnFlyingChip(fromX, fromY, value) {
+    const STACK_OFFSET = 7;   // px per chip in the pile
+    const stackIdx = this._betStackChips ? this._betStackChips.length : 0;
+    const toX = this._betStackX;
+    const toY = this._betStackBaseY - stackIdx * STACK_OFFSET;
+
+    // Tiny x-jitter on each chip so the pile reads as hand-stacked, not stamped.
+    const jitterX = (Math.random() - 0.5) * 4;
+
+    const flying = this._drawStackChip(fromX, fromY, value);
+
+    // Quadratic-bezier arc — control point ~90px above midpoint to give it
+    // some lift. onUpdate interpolates so the chip flies over the table.
+    const ctrlX = (fromX + toX) / 2;
+    const ctrlY = Math.min(fromY, toY) - 110;
+    const tgt = { t: 0 };
+
+    this.tweens.add({
+      targets: tgt,
+      t: 1,
+      duration: 380,
+      ease: 'Sine.easeIn',
+      onUpdate: () => {
+        const t  = tgt.t;
+        const it = 1 - t;
+        flying.x = it * it * fromX + 2 * it * t * ctrlX + t * t * (toX + jitterX);
+        flying.y = it * it * fromY + 2 * it * t * ctrlY + t * t * toY;
+      },
+      onComplete: () => this._landFlyingChip(flying, value),
+    });
+  }
+
+  _landFlyingChip(flying, value) {
+    if (!this._betStackChips) {
+      // Scene must've torn down mid-flight — just drop the chip.
+      flying.destroy();
+      return;
+    }
+    this._betStackChips.push({ g: flying, value });
+
+    // Squash-and-stretch settle on land
+    flying.scaleY = 0.55; flying.scaleX = 1.35;
+    this.tweens.add({
+      targets: flying,
+      scaleX: 1, scaleY: 1,
+      duration: 220,
+      ease: 'Back.Out',
+    });
+
+    // Cap visible pile at 12. Older chips fade off the bottom so the pile
+    // never grows past the case-file panel above it.
+    while (this._betStackChips.length > 12) {
+      const oldest = this._betStackChips.shift();
+      this.tweens.add({
+        targets: oldest.g,
+        alpha: 0,
+        duration: 220,
+        onComplete: () => oldest.g.destroy(),
+      });
+    }
+  }
+
+  // CLEAR button — scatter the pile outward + fade so the reset reads as a
+  // deliberate sweep, not just a number flip back to $0.
+  _clearBetStack() {
+    if (!this._betStackChips) return;
+    const chips = this._betStackChips;
+    this._betStackChips = [];
+    chips.forEach((c, i) => {
+      const angle    = Math.random() * Math.PI * 2;
+      const distance = 70 + Math.random() * 50;
+      this.tweens.add({
+        targets: c.g,
+        x: c.g.x + Math.cos(angle) * distance,
+        y: c.g.y + Math.sin(angle) * distance,
+        rotation: (Math.random() - 0.5) * 3.5,
+        alpha: 0,
+        duration: 420 + i * 25,
+        ease: 'Cubic.easeIn',
+        onComplete: () => c.g.destroy(),
+      });
+    });
+  }
+
+  // Confirm/round-end — gentle fade. The chips have "left the felt."
+  _fadeBetStack() {
+    if (!this._betStackChips) return;
+    const chips = this._betStackChips;
+    this._betStackChips = [];
+    chips.forEach((c, i) => {
+      this.tweens.add({
+        targets: c.g,
+        alpha: 0,
+        duration: 280,
+        delay: i * 24,
+        ease: 'Cubic.easeIn',
+        onComplete: () => c.g.destroy(),
+      });
+    });
   }
 
   // ── Bet display ────────────────────────────────────────────
@@ -229,6 +370,13 @@ class UIScene extends Phaser.Scene {
     const panelH = 90;
     const by = height - panelH / 2;
     const bx = width * 0.42;
+
+    // Physical chip pile lives just to the LEFT of the bet number. New chips
+    // arc from the tray and stack upward. Initialized fresh per scene so
+    // stale graphics never survive a restart.
+    this._betStackChips = [];
+    this._betStackX     = bx - 110;
+    this._betStackBaseY = by + 14;     // bottom of the pile (first chip lands here)
 
     const lbl = this.add.text(bx, by - 16, 'CURRENT BET', {
       fontFamily: VI.FONTS.BODY, fontSize: '10px',
@@ -249,6 +397,8 @@ class UIScene extends Phaser.Scene {
     clrZone.on('pointerup', () => {
       this._accumulatedBet = 0;
       this._refreshBetDisplay(0);
+      // Scatter the chip pile so the reset reads as deliberate, not silent.
+      this._clearBetStack();
     });
 
     // Confirm bet button
@@ -285,6 +435,8 @@ class UIScene extends Phaser.Scene {
       this._currentBet = this._accumulatedBet;
       gs.events.emit('ui:bet_confirmed', this._currentBet);
       this._showToast(`Bet confirmed: $${this._currentBet}`, VI.HEX.VI_AMBER, 900);
+      // Chips have been "pushed to the table" — fade the pile.
+      this._fadeBetStack();
     });
 
     // Track every bet-builder element so we can show/hide as a group.
@@ -483,12 +635,14 @@ class UIScene extends Phaser.Scene {
     this._showToast(`+$${Math.round(data.payout).toLocaleString()}`, VI.HEX.GOLD, 2500);
     this._accumulatedBet = 0;
     if (this._betText) this._betText.setText('$0');
+    this._fadeBetStack();   // safety — pile should already be empty from confirm
   }
 
   _onLoss(data) {
     this._showToast(`-$${data.lost.toLocaleString()}`, VI.HEX.VI_RED, 2500);
     this._accumulatedBet = 0;
     if (this._betText) this._betText.setText('$0');
+    this._fadeBetStack();
   }
 
   _onNextRound(balance) {
@@ -496,6 +650,7 @@ class UIScene extends Phaser.Scene {
     this._accumulatedBet = 0;
     this._currentBet     = 0;
     if (this._betText) this._betText.setText('$0');
+    this._fadeBetStack();
   }
 
   // ── Toast notifications ─────────────────────────────────────

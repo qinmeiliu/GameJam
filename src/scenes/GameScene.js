@@ -319,11 +319,14 @@ class GameScene extends Phaser.Scene {
       this._clearSuspectSparkles(wrongSpr);
 
       // Vacuum-suck execution: silhouette shrinks + spins toward the floor,
-      // hex + name slump down and dim. More dramatic than the old straight
-      // alpha fade and tells the player "this one is OUT, not just dimmed."
+      // hex + name slump down and dim. Scale is RELATIVE to the silhouette's
+      // resting scale — critical because PNG-based suspects start at very
+      // small scale (setDisplaySize/1024px source), so an absolute 0.25 would
+      // actually grow them. Vector suspects start at ~1.5, also relative.
       this.tweens.add({
         targets: wrongSpr.silG,
-        scaleX: 0.25, scaleY: 0.25,
+        scaleX: (wrongSpr.silBaseScaleX || 1) * 0.25,
+        scaleY: (wrongSpr.silBaseScaleY || 1) * 0.25,
         rotation: 0.45,
         alpha: 0.10,
         duration: 520, ease: 'Cubic.easeIn',
@@ -763,14 +766,31 @@ class GameScene extends Phaser.Scene {
       const g          = this.add.graphics();
       this._drawSuspectToken(g, cx, cy, tokenR, sus.color);
 
-      // Character silhouette inside the hex (replaces the bare number).
-      // Drawn at origin so we can position + scale the graphics cleanly.
-      const silG = this.add.graphics();
-      this._drawSuspectSilhouette(silG, sus);
-      silG.setPosition(cx, cy);
-      // Reference scale matches the Lobby seat hex (r≈46). Scale up/down
-      // for the game-scene tokenR so silhouettes always fill their hex.
-      silG.setScale(tokenR / 46);
+      // Character art inside the hex. If the suspect PNG is loaded, use the
+      // Image; otherwise fall back to the vector silhouette. Both expose the
+      // same {x, y, alpha, scaleX, scaleY, rotation} surface so the downstream
+      // reveal / breath / vacuum-suck tweens don't need to care which it is.
+      let silG;
+      const spriteKey = `suspect-${sus.id}`;
+      if (this.textures.exists(spriteKey)) {
+        silG = this.add.image(cx, cy, spriteKey);
+        // Display size = hex diameter × 2.2 so head pops above the hex like
+        // the old vector silhouette did. Origin defaults to 0.5/0.5 so the
+        // image is centered on (cx, cy) — same anchoring as Graphics version.
+        silG.setDisplaySize(tokenR * 2.2, tokenR * 2.2);
+      } else {
+        silG = this.add.graphics();
+        this._drawSuspectSilhouette(silG, sus);
+        silG.setPosition(cx, cy);
+        // Reference scale matches the Lobby seat hex (r≈46). Scale up/down
+        // for the game-scene tokenR so silhouettes always fill their hex.
+        silG.setScale(tokenR / 46);
+      }
+      // Record the resting scale so SECOND_CHANCE's vacuum-suck can shrink
+      // RELATIVE to it (works for both Graphics and Image — Image scale is
+      // tiny because setDisplaySize divides by the 1024px native size).
+      const silBaseScaleX = silG.scaleX;
+      const silBaseScaleY = silG.scaleY;
 
       const nameText = this.add.text(cx, cy + tokenR + 14, sus.name.toUpperCase(), {
         fontFamily: VI.FONTS.HEADING, fontSize: '13px',
@@ -866,6 +886,7 @@ class GameScene extends Phaser.Scene {
         cx, cy, tokenR, idx, sus,
         // visual state slots
         baseG_Y, baseSilG_Y, baseNameText_Y,
+        silBaseScaleX, silBaseScaleY,    // resting silhouette scale for relative tweens
         sparkles:    [],      // orbiting gold dots when selected
         sparkleTween: null,
         breathTween: null,

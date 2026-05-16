@@ -33,15 +33,23 @@ class PreloadScene extends Phaser.Scene {
     // this.load.image('ducky-lose',          'assets/images/ducky/ducky-lose.png');
 
     // ── Suspect portraits (8 characters) ─────────────────────
-    // Expected: ~160x180 each, transparent BG, hex-friendly framing.
-    // this.load.image('suspect-butler',    'assets/images/suspects/butler.png');
-    // this.load.image('suspect-chef',      'assets/images/suspects/chef.png');
-    // this.load.image('suspect-mayor',     'assets/images/suspects/mayor.png');
-    // this.load.image('suspect-janitor',   'assets/images/suspects/janitor.png');
-    // this.load.image('suspect-count',     'assets/images/suspects/count.png');
-    // this.load.image('suspect-mime',      'assets/images/suspects/mime.png');
-    // this.load.image('suspect-duchess',   'assets/images/suspects/duchess.png');
-    // this.load.image('suspect-librarian', 'assets/images/suspects/librarian.png');
+    // Texture key is `suspect-<id>` where id matches MURDER_DATA.victims[].id.
+    // The Count's file is named `countrubberduck.png` instead of `count.png`,
+    // so we keep an explicit id→filename mapping. GameScene checks
+    // `textures.exists` and falls back to the vector silhouette if missing.
+    const SUSPECT_FILES = {
+      butler:    'butler.png',
+      chef:      'chef.png',
+      mayor:     'mayor.png',
+      janitor:   'janitor.png',
+      count:     'countrubberduck.png',
+      mime:      'mime.png',
+      duchess:   'duchess.png',
+      librarian: 'librarian.png',
+    };
+    Object.keys(SUSPECT_FILES).forEach((id) => {
+      this.load.image(`suspect-${id}`, `assets/images/suspects/${SUSPECT_FILES[id]}`);
+    });
 
     // ── Victim portraits (10 duck aristocrats) ──────────────
     // Used in BETTING case-file panel. Expected ~200x200, transparent BG.

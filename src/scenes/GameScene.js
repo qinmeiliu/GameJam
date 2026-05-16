@@ -1991,7 +1991,10 @@ class GameScene extends Phaser.Scene {
     this._roomBg.setAlpha(0);
 
     // 3. Glow-Fi atmosphere — ellipses, dot matrix, arc. These overlay the
-    //    room art at low alpha to keep the brand's Neo-Vector signature.
+    //    room art at low alpha to keep the brand's Neo-Vector signature when
+    //    no room PNG is showing. Once a room background loads, the overlay
+    //    fades to near-zero so the room art reads clearly (the dot matrix
+    //    in particular was way too prominent on top of detailed room art).
     const bg = this.add.graphics();
     bg.fillStyle(VI.COLORS.CYAN, 0.03);
     bg.fillEllipse(width * 0.75, height * 0.3, 620, 420);
@@ -2011,6 +2014,10 @@ class GameScene extends Phaser.Scene {
     arc.beginPath();
     arc.arc(width * 0.65, height * 1.2, 430, Phaser.Math.DegToRad(222), Phaser.Math.DegToRad(308));
     arc.strokePath();
+
+    // Track the overlay layers so _setRoomBackground can fade them out when
+    // a room PNG is active.
+    this._glowFiOverlay = [bg, dot, arc];
   }
 
   // ── Per-room background ────────────────────────────────────
@@ -2022,11 +2029,17 @@ class GameScene extends Phaser.Scene {
     if (!this._roomBg) return;          // _drawBackground hasn't run yet
     const key = `bg-${roomId}`;
     if (!roomId || !this.textures.exists(key)) {
-      // Fade out any prior image, leaving the vector background alone.
+      // Fade out any prior image AND restore the Glow-Fi vector overlay so
+      // the scene still has brand texture when no room art is available.
       this.tweens.killTweensOf(this._roomBg);
       this.tweens.add({ targets: this._roomBg, alpha: 0, duration: 240 });
+      this._setGlowFiOverlayVisible(true);
       return;
     }
+
+    // Room art is taking over the visual stage — fade the vector dot matrix
+    // and color ellipses out so they don't compete with the room textures.
+    this._setGlowFiOverlayVisible(false);
 
     const TARGET_ALPHA = 0.78;          // dim enough for UI to read, bright enough to feel "in the room"
     const prev = this._roomBg.alpha;
@@ -2066,6 +2079,23 @@ class GameScene extends Phaser.Scene {
         duration: 520, ease: 'Cubic.easeOut',
       });
     }
+  }
+
+  // Toggle the Glow-Fi vector overlay (dots/ellipses/arc). Faded out when a
+  // room PNG is showing so it doesn't compete with the room art; restored
+  // when no room art is available.
+  _setGlowFiOverlayVisible(visible) {
+    if (!this._glowFiOverlay) return;
+    const targetAlpha = visible ? 1 : 0.08;   // leave a whisper so brand DNA isn't fully gone
+    this._glowFiOverlay.forEach(g => {
+      this.tweens.killTweensOf(g);
+      this.tweens.add({
+        targets: g,
+        alpha: targetAlpha,
+        duration: 380,
+        ease: 'Cubic.easeOut',
+      });
+    });
   }
 
   _drawMiniDucky(x, y) {

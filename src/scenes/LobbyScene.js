@@ -217,6 +217,32 @@ class LobbyScene extends Phaser.Scene {
     // Hex holding device — separate graphics per state for clean refresh
     const hex      = this.add.graphics();
     const silG     = this.add.graphics();
+
+    // If a suspect PNG is loaded, use the same flat-mascot portrait as the
+    // GameScene's ACCUSE hex. silImg stays hidden when the seat is empty.
+    // Both silG (vector fallback) and silImg coexist on the seat record;
+    // _drawSeat shows whichever applies. Masked to the hex shape so the
+    // image's solid-black background doesn't cover the hex outline.
+    let silImg    = null;
+    let maskShape = null;
+    const spriteKey = `suspect-${char.id}`;
+    if (this.textures.exists(spriteKey)) {
+      silImg = this.add.image(cx, cy, spriteKey);
+      silImg.setDisplaySize(hexR * 2.0, hexR * 2.0);
+      silImg.setVisible(false);
+
+      maskShape = this.make.graphics({}, false);
+      maskShape.fillStyle(0xffffff, 1);
+      const maskR = hexR * 0.94;
+      const maskPts = [];
+      for (let a = 0; a < 6; a++) {
+        const ang = (Math.PI / 3) * a - Math.PI / 6;
+        maskPts.push({ x: cx + maskR * Math.cos(ang), y: cy + maskR * Math.sin(ang) });
+      }
+      maskShape.fillPoints(maskPts, true);
+      silImg.setMask(maskShape.createGeometryMask());
+    }
+
     const plus     = this.add.text(cx, cy - 2, '+', {
       fontFamily: VI.FONTS.HEADING, fontSize: '44px',
       color: VI.HEX.CREAM, stroke: '#000', strokeThickness: 3,
@@ -246,15 +272,17 @@ class LobbyScene extends Phaser.Scene {
       this._optionalOn[optIdx] = !this._optionalOn[optIdx];
       this._refreshAll();
       // Localized seat pulse instead of a full-screen camera flash.
-      // Tweening the silhouette layer keeps the feedback right at the click.
+      // Tweening whichever silhouette layer is visible (PNG image preferred,
+      // vector fallback otherwise) keeps the feedback right at the click.
+      const seatRef = this._seats[idx];
       this.tweens.add({
-        targets: this._seats[idx].silG,
+        targets: seatRef.silImg || seatRef.silG,
         alpha: { from: 0.2, to: 1 },
         duration: 220, ease: 'Cubic.easeOut',
       });
     });
 
-    return { idx, cx, cy, hexR, color, name, char, hex, silG, plus, label, sublabel, zone };
+    return { idx, cx, cy, hexR, color, name, char, hex, silG, silImg, maskShape, plus, label, sublabel, zone };
   }
 
   _isOptional(idx) {
@@ -292,8 +320,14 @@ class LobbyScene extends Phaser.Scene {
       s.hex.lineStyle(hover ? 3 : 2, borderColor, hover ? 1 : 0.85);
       s.hex.strokePoints(pts, true);
 
-      // Character-specific silhouette per GDD spec (butler bowtie, chef hat, etc.)
-      this._drawSilhouette(s.silG, s.cx, s.cy, s.char);
+      // Prefer the PNG portrait if available — falls back to the vector
+      // silhouette so the lobby keeps working even if one suspect's PNG is
+      // missing from disk.
+      if (s.silImg) {
+        s.silImg.setVisible(true);
+      } else {
+        this._drawSilhouette(s.silG, s.cx, s.cy, s.char);
+      }
 
       s.plus.setAlpha(0);
 
@@ -315,6 +349,9 @@ class LobbyScene extends Phaser.Scene {
       s.hex.strokePoints(pts, true);
       s.hex.lineStyle(hover ? 3 : 2, VI.COLORS.CYAN, hover ? 0.95 : 0.35);
       s.hex.strokePoints(pts, true);
+
+      // Hide the portrait image so the empty seat shows the + sign cleanly.
+      if (s.silImg) s.silImg.setVisible(false);
 
       s.plus.setAlpha(hover ? 1 : 0.55);
       s.plus.setColor(hover ? VI.HEX.GOLD : VI.HEX.CYAN);

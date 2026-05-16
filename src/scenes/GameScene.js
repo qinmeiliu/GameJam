@@ -331,8 +331,10 @@ class GameScene extends Phaser.Scene {
         alpha: 0.10,
         duration: 520, ease: 'Cubic.easeIn',
       });
+      const slumpTargets = [wrongSpr.g, wrongSpr.nameText];
+      if (wrongSpr.maskShape) slumpTargets.push(wrongSpr.maskShape);
       this.tweens.add({
-        targets: [wrongSpr.g, wrongSpr.nameText],
+        targets: slumpTargets,
         alpha: 0.15,
         y: '+=22',
         duration: 520, ease: 'Cubic.easeIn',
@@ -743,6 +745,11 @@ class GameScene extends Phaser.Scene {
       if (s.breathTween)  s.breathTween.stop();
       if (s.sparkleTween) s.sparkleTween.stop();
       if (s.sparkles) s.sparkles.forEach(sp => sp.destroy());
+      // Clear the geometry mask before destroying the masked Image, then
+      // destroy the mask source Graphics (it's not in the display list so
+      // Phaser won't auto-clean it).
+      if (s.silG && s.silG.clearMask) s.silG.clearMask(true);
+      if (s.maskShape) s.maskShape.destroy();
       [s.g, s.nameText, s.highlightG, s.zone, s.silG, s.bubbleG, s.bubbleText]
         .forEach(o => { if (o) o.destroy(); });
     });
@@ -767,17 +774,42 @@ class GameScene extends Phaser.Scene {
       this._drawSuspectToken(g, cx, cy, tokenR, sus.color);
 
       // Character art inside the hex. If the suspect PNG is loaded, use the
-      // Image; otherwise fall back to the vector silhouette. Both expose the
-      // same {x, y, alpha, scaleX, scaleY, rotation} surface so the downstream
-      // reveal / breath / vacuum-suck tweens don't need to care which it is.
+      // Image (masked to hex shape); otherwise fall back to the vector
+      // silhouette. Both expose the same {x, y, alpha, scaleX, scaleY,
+      // rotation} surface so the downstream reveal / breath / vacuum-suck
+      // tweens don't need to care which it is.
       let silG;
+      let maskShape = null;
+      let baseMaskShape_Y = 0;
       const spriteKey = `suspect-${sus.id}`;
       if (this.textures.exists(spriteKey)) {
         silG = this.add.image(cx, cy, spriteKey);
-        // Display size = hex diameter × 2.2 so head pops above the hex like
-        // the old vector silhouette did. Origin defaults to 0.5/0.5 so the
-        // image is centered on (cx, cy) — same anchoring as Graphics version.
-        silG.setDisplaySize(tokenR * 2.2, tokenR * 2.2);
+        // Display size = ~2.0× tokenR so the duck reads clearly. The
+        // rectangular black bg of the PNG would normally cover the hex
+        // outline, so we mask the image to the hex shape — only the hex
+        // interior of the duck portrait is visible, and the hex outline
+        // (drawn into `g`) frames it cleanly.
+        silG.setDisplaySize(tokenR * 2.0, tokenR * 2.0);
+
+        // Mask: hex Graphics at world coords, NOT added to the display list
+        // (Phaser uses it purely as a geometry mask source). The mask must
+        // follow position tweens on silG — reveal drop and vacuum-suck both
+        // move the hex — so we keep maskShape in s.maskShape and add it to
+        // those tween target lists below.
+        maskShape = this.make.graphics({}, false);
+        maskShape.fillStyle(0xffffff, 1);
+        const maskR = tokenR * 0.94;   // slightly inside the hex outline
+        const maskPts = [];
+        for (let a = 0; a < 6; a++) {
+          const ang = (Math.PI / 3) * a - Math.PI / 6;
+          maskPts.push({
+            x: cx + maskR * Math.cos(ang),
+            y: cy + maskR * Math.sin(ang),
+          });
+        }
+        maskShape.fillPoints(maskPts, true);
+        silG.setMask(maskShape.createGeometryMask());
+        baseMaskShape_Y = maskShape.y;
       } else {
         silG = this.add.graphics();
         this._drawSuspectSilhouette(silG, sus);
@@ -887,6 +919,7 @@ class GameScene extends Phaser.Scene {
         // visual state slots
         baseG_Y, baseSilG_Y, baseNameText_Y,
         silBaseScaleX, silBaseScaleY,    // resting silhouette scale for relative tweens
+        maskShape, baseMaskShape_Y,      // hex mask follows reveal/dim tweens (null for vector fallback)
         sparkles:    [],      // orbiting gold dots when selected
         sparkleTween: null,
         breathTween: null,
@@ -905,16 +938,22 @@ class GameScene extends Phaser.Scene {
 
     this._suspectSprites.forEach((s, i) => {
       // Shift up to start position. We move ALL three so the hex + silhouette
-      // + name drop together as a unit.
+      // + name drop together as a unit. If a mask shape exists (image-based
+      // suspect), it drops with them so the hex window doesn't lag behind
+      // the duck mid-air — otherwise the duck appears half-clipped.
       s.g.y        = s.baseG_Y        - DROP;
       s.silG.y     = s.baseSilG_Y     - DROP;
       s.nameText.y = s.baseNameText_Y - DROP;
+      if (s.maskShape) s.maskShape.y = s.baseMaskShape_Y - DROP;
 
       const delay = i * STAGGER_MS;
 
-      // Position drop with bounce
+      // Position drop with bounce — include the mask shape so it stays in
+      // sync with the hex and the duck image.
+      const dropTargets = [s.g, s.silG, s.nameText];
+      if (s.maskShape) dropTargets.push(s.maskShape);
       this.tweens.add({
-        targets: [s.g, s.silG, s.nameText],
+        targets: dropTargets,
         y: `+=${DROP}`,
         duration: DROP_MS,
         delay,
@@ -1991,6 +2030,17 @@ class GameScene extends Phaser.Scene {
 
     const TARGET_ALPHA = 0.78;          // dim enough for UI to read, bright enough to feel "in the room"
     const prev = this._roomBg.alpha;
+    const W = this.scale.width;
+    const H = this.scale.height;
+
+    // CRITICAL: setTexture() snaps the image back to the new texture's NATIVE
+    // dimensions (our source PNGs are 1659×948 — larger than the 1280×720
+    // canvas), so we must re-call setDisplaySize after every swap. Otherwise
+    // only the center crop is visible and the room art looks "zoomed in".
+    const applyTexture = (textureKey) => {
+      this._roomBg.setTexture(textureKey);
+      this._roomBg.setDisplaySize(W, H);
+    };
 
     // Mid-round swap → crossfade. First scene entry (prev≈0) → straight fade-in.
     this.tweens.killTweensOf(this._roomBg);
@@ -2000,7 +2050,7 @@ class GameScene extends Phaser.Scene {
         alpha: 0,
         duration: 260, ease: 'Cubic.easeIn',
         onComplete: () => {
-          this._roomBg.setTexture(key);
+          applyTexture(key);
           this.tweens.add({
             targets: this._roomBg,
             alpha: TARGET_ALPHA,
@@ -2009,7 +2059,7 @@ class GameScene extends Phaser.Scene {
         },
       });
     } else {
-      this._roomBg.setTexture(key);
+      applyTexture(key);
       this.tweens.add({
         targets: this._roomBg,
         alpha: TARGET_ALPHA,

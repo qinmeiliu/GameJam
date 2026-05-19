@@ -383,9 +383,11 @@ class UIScene extends Phaser.Scene {
       color: VI.HEX.CYAN, letterSpacing: 4,
     }).setOrigin(0.5);
 
-    this._betText = this.add.text(bx, by + 6, '$0', {
+    // Right-aligned so long bets (e.g. $10,000) grow leftward into empty
+    // space instead of overlapping the CONFIRM BET button to the right.
+    this._betText = this.add.text(bx + 30, by + 6, '$0', {
       fontFamily: VI.FONTS.MONO, fontSize: '24px', color: VI.HEX.GOLD,
-    }).setOrigin(0.5);
+    }).setOrigin(1, 0.5);
 
     // Clear bet button
     const clrZone = this.add.zone(bx, by + 30, 70, 18).setInteractive({ cursor: 'pointer' });

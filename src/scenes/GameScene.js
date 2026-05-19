@@ -541,16 +541,18 @@ class GameScene extends Phaser.Scene {
     g.lineStyle(1, VI.COLORS.CYAN, 0.25);
     g.lineBetween(0, 84, width, 84);
 
-    this._drawMiniDucky(46, 42);
+    // (The tiny vector-drawn duck was removed once the real Ducky mascot
+    // got wired into the case file panel and scoreboard — no longer needed
+    // as a brand accent in the header.)
 
-    this.add.text(96, 12, 'CASE FILE', {
+    this.add.text(32, 12, 'CASE FILE', {
       fontFamily: VI.FONTS.BODY, fontSize: '10px',
       color: VI.HEX.CYAN, letterSpacing: 5,
     });
-    this._caseTitle  = this.add.text(96, 28, '—', {
+    this._caseTitle  = this.add.text(32, 28, '—', {
       fontFamily: VI.FONTS.HEADING, fontSize: '20px', color: VI.HEX.GOLD,
     });
-    this._caseDetail = this.add.text(96, 52, '—', {
+    this._caseDetail = this.add.text(32, 52, '—', {
       fontFamily: VI.FONTS.MONO, fontSize: '11px', color: VI.HEX.CREAM,
     });
 
@@ -1256,16 +1258,15 @@ class GameScene extends Phaser.Scene {
       duration: 950, yoyo: true, repeat: -1, ease: 'Sine.easeInOut',
     });
 
-    // ── Ducky the Detective in the lower-left, examining the case ──
-    // Circular gold-frame portrait of ducky-investigating — anchors the
-    // panel with a character presence so the player isn't reading alone.
-    // Fades in/out with the rest of the case file. Breath tween is started
-    // fresh in _showCaseFile each round so it survives the per-round
-    // killTweensOf in _hideCaseFile.
+    // ── Ducky the Detective — host portrait in the top-right area ──
+    // Lives OUTSIDE the case file panel in the empty top-right space
+    // (the area above where the clue market will appear during ACCUSE).
+    // Larger so he reads as the player's host, not a tiny accent.
     if (this.textures.exists('ducky-investigating')) {
-      const dx = cx - pw / 2 + 100;
-      const dy = cy + ph / 2 - 110;
-      const dR = 76;
+      const W = this.scale.width;
+      const dR = 110;                          // bigger now that he's the focal corner
+      const dx = W - dR - 28;                  // 28px from right edge
+      const dy = cy + 8;                       // roughly vertically aligned with panel center
 
       this._cfDucky = this.add.image(dx, dy, 'ducky-investigating');
       this._cfDucky.setDisplaySize(dR * 2.05, dR * 2.05);
@@ -1276,10 +1277,16 @@ class GameScene extends Phaser.Scene {
       this._cfDucky.setMask(this._cfDuckyMask.createGeometryMask());
 
       this._cfDuckyFrame = this.add.graphics();
-      this._cfDuckyFrame.lineStyle(8, VI.COLORS.GOLD, 0.18);
+      this._cfDuckyFrame.lineStyle(10, VI.COLORS.GOLD, 0.20);
       this._cfDuckyFrame.strokeCircle(dx, dy, dR);
-      this._cfDuckyFrame.lineStyle(2, VI.COLORS.GOLD, 0.9);
+      this._cfDuckyFrame.lineStyle(2, VI.COLORS.GOLD, 0.92);
       this._cfDuckyFrame.strokeCircle(dx, dy, dR);
+
+      // Caption — small label so players know who's reading with them
+      this._cfDuckyLabel = this.add.text(dx, dy + dR + 18, 'DUCKY · ON THE CASE', {
+        fontFamily: VI.FONTS.HEADING, fontSize: '11px',
+        color: VI.HEX.GOLD, letterSpacing: 4,
+      }).setOrigin(0.5).setAlpha(0);
 
       this._cfDuckyBaseY = dy;     // for breath-tween reset on each round
     }
@@ -1289,6 +1296,7 @@ class GameScene extends Phaser.Scene {
       this._cfVictim, this._cfTitle, this._cfNarrative, this._cfMotive, this._cfCTA];
     if (this._cfDucky)      this._caseFileElements.push(this._cfDucky);
     if (this._cfDuckyFrame) this._caseFileElements.push(this._cfDuckyFrame);
+    if (this._cfDuckyLabel) this._caseFileElements.push(this._cfDuckyLabel);
     this._caseFileElements.forEach(e => e.setAlpha(0));
   }
 
@@ -1798,7 +1806,78 @@ class GameScene extends Phaser.Scene {
     const targetPhase = (gs.phase === VI.PHASES.SECOND_CHANCE)
       ? VI.PHASES.ACCUSATION_2
       : VI.PHASES.ACCUSATION_1;
-    this._setPhase(targetPhase);
+
+    // J'ACCUSE moment — Ace Attorney-style — Ducky slides in pointing at the
+    // suspect for a beat before the verdict lands. ~700ms hold gives the
+    // player a satisfying "I'm accusing them!" pause; then the resolution
+    // overlay takes over.
+    this._showDuckyPointing(() => this._setPhase(targetPhase));
+  }
+
+  // Dramatic full-screen Ducky pointing pose with a tiny "J'ACCUSE!" tag.
+  // Falls back to an immediate phase transition if the texture isn't loaded.
+  _showDuckyPointing(onComplete) {
+    if (!this.textures.exists('ducky-pointing')) {
+      onComplete && onComplete();
+      return;
+    }
+    const W = this.scale.width;
+    const H = this.scale.height;
+
+    // Half-screen dim so the pointing pose pops against the gameplay
+    const dim = this.add.graphics();
+    dim.fillStyle(0x000000, 0);
+    dim.fillRect(0, 0, W, H);
+    dim.setDepth(1500);
+    this.tweens.add({ targets: dim, alpha: { from: 0, to: 0.45 }, duration: 160, ease: 'Cubic.easeOut' });
+
+    // Ducky slides in from the LEFT, lands at center-left, points to the right
+    // (toward the suspect grid where the accused duck sits).
+    const targetX = W * 0.32;
+    const targetY = H * 0.52;
+    const dR      = 220;
+    const ducky = this.add.image(-dR, targetY, 'ducky-pointing');
+    ducky.setDisplaySize(dR * 2.0, dR * 2.0);
+    ducky.setDepth(1501);
+
+    this.tweens.add({
+      targets: ducky,
+      x: targetX,
+      duration: 320,
+      ease: 'Back.Out',
+    });
+
+    // "J'ACCUSE!" stamp text — slams in 200ms after Ducky lands
+    const accuseText = this.add.text(W * 0.62, H * 0.46, "J'ACCUSE!", {
+      fontFamily: VI.FONTS.HEADING, fontSize: '88px',
+      color: VI.HEX.GOLD, stroke: '#000', strokeThickness: 10,
+      shadow: { blur: 24, color: VI.HEX.MAGENTA, fill: true },
+      letterSpacing: 4,
+    }).setOrigin(0.5);
+    accuseText.setRotation(-0.05);
+    accuseText.setScale(2.0);
+    accuseText.setAlpha(0);
+    accuseText.setDepth(1502);
+    this.tweens.add({
+      targets: accuseText,
+      scale: 1, alpha: 1,
+      duration: 280, delay: 220, ease: 'Back.Out',
+    });
+
+    // Hold for ~700ms after entrance, then fade everything out and fire callback
+    this.time.delayedCall(900, () => {
+      this.tweens.add({
+        targets: [dim, ducky, accuseText],
+        alpha: 0,
+        duration: 220, ease: 'Cubic.easeIn',
+        onComplete: () => {
+          dim.destroy();
+          ducky.destroy();
+          accuseText.destroy();
+          if (onComplete) onComplete();
+        },
+      });
+    });
   }
 
   _resolveWin(secondAccusation) {
@@ -2057,19 +2136,24 @@ class GameScene extends Phaser.Scene {
       this._startRound();
     });
 
-    // Track everything for cleanup at _startRound — array + container
+    // Track everything for cleanup at _startRound — array + container.
+    // CRITICAL: the geometry-mask Graphics (duckyMask) MUST NOT be added to
+    // the round container, because Container.add(maskGraphics) registers it
+    // on the display list and the mask source paints as a visible white
+    // circle on top of Ducky. Track it for cleanup only.
     if (!this._roundOverlayObjs) this._roundOverlayObjs = [];
-    const all = [overlay, panelContainer, headline, verdictText, deltaText, balanceText, btnG, btnLbl, zone];
-    if (multText)    all.push(multText);
-    if (multSubText) all.push(multSubText);
-    if (duckyImg)    all.push(duckyImg);
-    if (duckyFrame)  all.push(duckyFrame);
-    if (duckyMask)   all.push(duckyMask);
-    confettiPieces.forEach(p => all.push(p));
-    all.forEach(o => this._roundOverlayObjs.push(o));
+    const displayItems = [overlay, panelContainer, headline, verdictText, deltaText, balanceText, btnG, btnLbl, zone];
+    if (multText)    displayItems.push(multText);
+    if (multSubText) displayItems.push(multSubText);
+    if (duckyImg)    displayItems.push(duckyImg);
+    if (duckyFrame)  displayItems.push(duckyFrame);
+    confettiPieces.forEach(p => displayItems.push(p));
+    displayItems.forEach(o => this._roundOverlayObjs.push(o));
     if (this._roundContainer) {
-      this._roundContainer.add(all);
+      this._roundContainer.add(displayItems);
     }
+    // Mask is destroyed but never displayed
+    if (duckyMask) this._roundOverlayObjs.push(duckyMask);
 
     // Camera response — keep the celebratory gold flash for wins, lighter
     // shake for losses (the COLD CASE stamp already sells the loss).

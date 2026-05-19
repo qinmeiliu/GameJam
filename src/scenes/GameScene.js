@@ -1848,12 +1848,14 @@ class GameScene extends Phaser.Scene {
       }).setOrigin(0.5).setAlpha(0);
       this.tweens.add({ targets: headline, alpha: 1, duration: 320, delay: 280, ease: 'Cubic.easeOut' });
     } else {
-      // COLD CASE stamp — slammed in big, tilted, then settles to size 1
-      headline = this.add.text(cx, cy - 110, 'COLD CASE', {
-        fontFamily: VI.FONTS.HEADING, fontSize: '62px',
+      // COLD CASE stamp — slammed in big, tilted, then settles to size 1.
+      // Tight letter spacing so the words punch like an actual rubber stamp,
+      // and a hair smaller so the tilted text doesn't crowd the verdict line.
+      headline = this.add.text(cx, cy - 120, 'COLD CASE', {
+        fontFamily: VI.FONTS.HEADING, fontSize: '54px',
         color: VI.HEX.VI_RED, stroke: '#000', strokeThickness: 8,
         shadow: { blur: 18, color: VI.HEX.VI_RED, fill: true },
-        letterSpacing: 8,
+        letterSpacing: 2,
       }).setOrigin(0.5);
       headline.setRotation(-0.18);
       headline.setScale(2.4);

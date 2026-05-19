@@ -25,12 +25,14 @@ class PreloadScene extends Phaser.Scene {
     // ──────────────────────────────────────────────────────────
 
     // ── Ducky mascot (hero sprite) ───────────────────────────
-    // Expected sizes: idle ~256x256, expressions same size, transparent BG.
-    // this.load.image('ducky-idle',          'assets/images/ducky/ducky-idle.png');
-    // this.load.image('ducky-investigating', 'assets/images/ducky/ducky-investigating.png');
-    // this.load.image('ducky-pointing',      'assets/images/ducky/ducky-pointing.png');
-    // this.load.image('ducky-win',           'assets/images/ducky/ducky-win.png');
-    // this.load.image('ducky-lose',          'assets/images/ducky/ducky-lose.png');
+    // 1024×1024 PNGs with solid black background. Hex masking is NOT used
+    // for Ducky (no hex frame around him); he renders as a free-floating
+    // mascot sprite. GameScene/MenuScene check textures.exists before using.
+    this.load.image('ducky-idle',          'assets/images/ducky/ducky-idle.png');
+    this.load.image('ducky-investigating', 'assets/images/ducky/ducky-investigating.png');
+    this.load.image('ducky-pointing',      'assets/images/ducky/ducky-pointing.png');
+    this.load.image('ducky-win',           'assets/images/ducky/ducky-win.png');
+    this.load.image('ducky-lose',          'assets/images/ducky/ducky-lose.png');
 
     // ── Suspect portraits (8 characters) ─────────────────────
     // Texture key is `suspect-<id>` where id matches MURDER_DATA.victims[].id.

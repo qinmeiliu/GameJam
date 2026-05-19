@@ -27,6 +27,9 @@ class MenuScene extends Phaser.Scene {
     // vector treatment if the PNG hasn't loaded.
     this._drawCinematicBackdrop();
 
+    // ── Ducky himself, our detective host ─────────────────────
+    this._drawTitleDucky();
+
     // ── Game Title — QUACKDUNNIT, single hero word ────────────
     const titleY = cy - 80;
 
@@ -195,6 +198,44 @@ class MenuScene extends Phaser.Scene {
         yoyo: true,
         repeat: -1,
       });
+    });
+  }
+
+  // Ducky in the lower-left as the player's detective host. Circular gold
+  // frame distinguishes him from the suspect tokens (hex-framed in-game).
+  // Gentle breath animation makes him feel alive next to the static title.
+  _drawTitleDucky() {
+    if (!this.textures.exists('ducky-idle')) return;
+    const { width, height } = this.scale;
+
+    const dx = 150;
+    const dy = height - 180;
+    const r  = 100;
+
+    // Duck portrait
+    const ducky = this.add.image(dx, dy, 'ducky-idle');
+    ducky.setDisplaySize(r * 2.05, r * 2.05);
+    ducky.setAlpha(0.96);
+
+    // Circular mask — kills the rectangular black PNG bg
+    const mask = this.make.graphics({}, false);
+    mask.fillStyle(0xffffff, 1);
+    mask.fillCircle(dx, dy, r * 0.96);
+    ducky.setMask(mask.createGeometryMask());
+
+    // Gold frame ring (subtle outer glow + crisp inner line)
+    const frame = this.add.graphics();
+    frame.lineStyle(10, VI.COLORS.GOLD, 0.18);
+    frame.strokeCircle(dx, dy, r);
+    frame.lineStyle(2, VI.COLORS.GOLD, 0.90);
+    frame.strokeCircle(dx, dy, r);
+
+    // Gentle breath — all three move in lockstep so the mask + frame stay
+    // aligned with the duck as he bobs up and down.
+    this.tweens.add({
+      targets: [ducky, mask, frame],
+      y: '-=6',
+      duration: 2400, yoyo: true, repeat: -1, ease: 'Sine.easeInOut',
     });
   }
 

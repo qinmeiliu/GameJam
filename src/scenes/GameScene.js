@@ -1256,9 +1256,39 @@ class GameScene extends Phaser.Scene {
       duration: 950, yoyo: true, repeat: -1, ease: 'Sine.easeInOut',
     });
 
+    // ── Ducky the Detective in the lower-left, examining the case ──
+    // Circular gold-frame portrait of ducky-investigating — anchors the
+    // panel with a character presence so the player isn't reading alone.
+    // Fades in/out with the rest of the case file. Breath tween is started
+    // fresh in _showCaseFile each round so it survives the per-round
+    // killTweensOf in _hideCaseFile.
+    if (this.textures.exists('ducky-investigating')) {
+      const dx = cx - pw / 2 + 100;
+      const dy = cy + ph / 2 - 110;
+      const dR = 76;
+
+      this._cfDucky = this.add.image(dx, dy, 'ducky-investigating');
+      this._cfDucky.setDisplaySize(dR * 2.05, dR * 2.05);
+
+      this._cfDuckyMask = this.make.graphics({}, false);
+      this._cfDuckyMask.fillStyle(0xffffff, 1);
+      this._cfDuckyMask.fillCircle(dx, dy, dR * 0.96);
+      this._cfDucky.setMask(this._cfDuckyMask.createGeometryMask());
+
+      this._cfDuckyFrame = this.add.graphics();
+      this._cfDuckyFrame.lineStyle(8, VI.COLORS.GOLD, 0.18);
+      this._cfDuckyFrame.strokeCircle(dx, dy, dR);
+      this._cfDuckyFrame.lineStyle(2, VI.COLORS.GOLD, 0.9);
+      this._cfDuckyFrame.strokeCircle(dx, dy, dR);
+
+      this._cfDuckyBaseY = dy;     // for breath-tween reset on each round
+    }
+
     // Store every element so we can show/hide as a group
     this._caseFileElements = [g, header, caseNum, sep, eyebrow,
       this._cfVictim, this._cfTitle, this._cfNarrative, this._cfMotive, this._cfCTA];
+    if (this._cfDucky)      this._caseFileElements.push(this._cfDucky);
+    if (this._cfDuckyFrame) this._caseFileElements.push(this._cfDuckyFrame);
     this._caseFileElements.forEach(e => e.setAlpha(0));
   }
 
@@ -1288,6 +1318,23 @@ class GameScene extends Phaser.Scene {
         duration: 350, delay: i * 35, ease: 'Cubic.easeOut',
       });
     });
+
+    // (Re)start Ducky's breath. _hideCaseFile kills tweens on cfDucky during
+    // its fade-out, so the breath has to be rebuilt every round. Mask is in
+    // the target list so the masked image stays aligned with the gold frame.
+    if (this._cfDucky && this._cfDuckyMask && this._cfDuckyFrame) {
+      // Reset position before re-tweening — otherwise the y-drift accumulates
+      // across rounds and Ducky migrates downward over time.
+      const baseY = this._cfDuckyBaseY;
+      this._cfDucky.y      = baseY;
+      this._cfDuckyMask.y  = 0;
+      this._cfDuckyFrame.y = 0;
+      this._cfDuckyBreath = this.tweens.add({
+        targets: [this._cfDucky, this._cfDuckyMask, this._cfDuckyFrame],
+        y: '-=5',
+        duration: 2200, yoyo: true, repeat: -1, ease: 'Sine.easeInOut',
+      });
+    }
   }
 
   _hideCaseFile() {
@@ -1946,6 +1993,45 @@ class GameScene extends Phaser.Scene {
     // Confetti on win — gold/cyan/magenta/orange pieces cascade from top of panel
     const confettiPieces = win ? this._spawnConfetti(cx, cy - ph/2 + 10, pw - 60) : [];
 
+    // ── Ducky reacts to the result ─────────────────────────────
+    // Big mascot portrait to the LEFT of the panel — win or lose state.
+    // Same circle-frame treatment as the title screen / case file so the
+    // mascot reads as a consistent character across the whole game.
+    let duckyImg = null, duckyMask = null, duckyFrame = null;
+    const duckyKey = win ? 'ducky-win' : 'ducky-lose';
+    if (this.textures.exists(duckyKey)) {
+      const dR  = 95;
+      const dx  = cx - pw / 2 - dR - 16;   // outside the left edge of the panel
+      const dy  = cy + 8;                  // slightly below panel center
+
+      duckyImg = this.add.image(dx, dy, duckyKey);
+      duckyImg.setDisplaySize(dR * 2.05, dR * 2.05);
+
+      duckyMask = this.make.graphics({}, false);
+      duckyMask.fillStyle(0xffffff, 1);
+      duckyMask.fillCircle(dx, dy, dR * 0.96);
+      duckyImg.setMask(duckyMask.createGeometryMask());
+
+      duckyFrame = this.add.graphics();
+      const ringColor = win ? VI.COLORS.GOLD : VI.COLORS.VI_RED;
+      duckyFrame.lineStyle(10, ringColor, 0.20);
+      duckyFrame.strokeCircle(dx, dy, dR);
+      duckyFrame.lineStyle(2, ringColor, 0.92);
+      duckyFrame.strokeCircle(dx, dy, dR);
+
+      // Alpha-only entrance — Graphics drawn at world coords don't scale
+      // around their visual center, so tweening scaleX/Y on the frame would
+      // drift it toward (0,0). The panel's own scale-in already provides the
+      // dramatic entrance; Ducky just rises into view alongside it.
+      duckyImg.setAlpha(0);
+      duckyFrame.setAlpha(0);
+      this.tweens.add({
+        targets: [duckyImg, duckyFrame],
+        alpha: 1,
+        duration: 420, delay: 160, ease: 'Cubic.easeOut',
+      });
+    }
+
     // Next case button
     const bw = 230, bh = 50;
     const btnG = this.add.graphics();
@@ -1976,6 +2062,9 @@ class GameScene extends Phaser.Scene {
     const all = [overlay, panelContainer, headline, verdictText, deltaText, balanceText, btnG, btnLbl, zone];
     if (multText)    all.push(multText);
     if (multSubText) all.push(multSubText);
+    if (duckyImg)    all.push(duckyImg);
+    if (duckyFrame)  all.push(duckyFrame);
+    if (duckyMask)   all.push(duckyMask);
     confettiPieces.forEach(p => all.push(p));
     all.forEach(o => this._roundOverlayObjs.push(o));
     if (this._roundContainer) {

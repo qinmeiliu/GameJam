@@ -107,12 +107,14 @@ const VI = {
     ACC2_PENALTY:           0.55,
     // No-clue bonus multiplier applied to gross iff cluesPurchased === 0.
     NO_CLUE_BONUS_MULT:     1.25,
-    // DEAD-EYE side bet — opt-in pre-round wager equal to 15% of main bet.
-    // Pays out only on a correct Acc#1; lost on Acc#2 win OR loss.
-    // Payout formula: wager × (suspectCount - 0.15) — house edge ~3–5%
-    // (drops as suspect count rises). Picked so hits feel like a real score.
-    DEAD_EYE_WAGER_FRAC:    0.15,
-    DEAD_EYE_PAYOUT_SHIFT:  0.15,    // payout = wager × (N - this)
+    // DEAD-EYE side bet — opt-in pre-round wager equal to 10% of main bet
+    // (small skin in the game). Pays out only on a correct Acc#1; lost on
+    // Acc#2 win OR loss. Payout formula: wager × (suspectCount - shift).
+    // SHIFT is NEGATIVE (-1.0) by design — produces a 4×–7× payout that
+    // makes hits feel like a lottery score. Player-favored on EV (~17–33%
+    // edge), which is fine for an optional high-variance side bet.
+    DEAD_EYE_WAGER_FRAC:    0.10,
+    DEAD_EYE_PAYOUT_SHIFT:  -1.0,    // payout = wager × (N - shift); negative = bigger payouts
     // Order-based clue cost fractions (of bet). First clue cheap; second expensive.
     CLUE_COST_FIRST_FRAC:   0.10,
     CLUE_COST_SECOND_FRAC:  0.20,

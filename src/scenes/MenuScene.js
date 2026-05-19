@@ -422,32 +422,14 @@ class MenuScene extends Phaser.Scene {
     closeZone.on('pointerover', () => drawClose(true));
     closeZone.on('pointerout',  () => drawClose(false));
 
-    // GOT IT button at bottom of panel
-    const gw = 160, gh = 38;
-    const gx = cx, gy = cy + ph/2 - 38;
-    const gotitG = this.add.graphics().setDepth(102);
-    const drawGotIt = (hover) => {
-      gotitG.clear();
-      gotitG.fillStyle(hover ? VI.COLORS.MAGENTA : VI.COLORS.VI_PURPLE, 1);
-      gotitG.fillRoundedRect(gx - gw/2, gy - gh/2, gw, gh, 8);
-      gotitG.lineStyle(1, VI.COLORS.GOLD, hover ? 1 : 0.7);
-      gotitG.strokeRoundedRect(gx - gw/2, gy - gh/2, gw, gh, 8);
-    };
-    drawGotIt(false);
-    const gotitLbl = this.add.text(gx, gy, 'GOT IT  ✓', {
-      fontFamily: VI.FONTS.HEADING, fontSize: '14px',
-      color: VI.HEX.GOLD, letterSpacing: 4,
-    }).setOrigin(0.5).setDepth(103);
-    const gotitZone = this.add.zone(gx, gy, gw, gh).setInteractive({ cursor: 'pointer' }).setDepth(103);
-    gotitZone.on('pointerover', () => { drawGotIt(true);  gotitLbl.setColor('#ffffff'); });
-    gotitZone.on('pointerout',  () => { drawGotIt(false); gotitLbl.setColor(VI.HEX.GOLD); });
-
     const closeModal = () => {
-      [overlay, panel, title, text, closeG, closeZone, gotitG, gotitLbl, gotitZone].forEach(o => o && o.destroy());
+      [overlay, panel, title, text, closeG, closeZone].forEach(o => o && o.destroy());
       this._modalOpen = false;
     };
     closeZone.on('pointerup', closeModal);
-    gotitZone.on('pointerup', closeModal);
+    // Also let ESC close it for keyboard users
+    const escHandler = () => { if (this._modalOpen) closeModal(); };
+    this.input.keyboard.once('keydown-ESC', escHandler);
   }
 
   _showCredits() {

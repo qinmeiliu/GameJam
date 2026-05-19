@@ -305,6 +305,21 @@ class RoundController {
     };
   }
 
+  // Best-case-scenario preview used by UIScene during BETTING to display
+  // "WIN UP TO $XXX" next to the bet counter. Assumes the player locks
+  // their bet at full folder integrity (Early Bird ✓), buys zero clues
+  // (No-Clue Bonus ✓), and accuses correctly on the first attempt.
+  // Does NOT account for Accusation #2 (which caps payout at 30%).
+  getMaxPotentialPayout(bet) {
+    if (!bet || bet <= 0) return 0;
+    const suspMult  = VI.GAME.SUSPECT_MULTS[this.suspectCount] || (this.suspectCount * 0.9);
+    const foldMult  = this._folderMultiplier(1.0);                                    // 1.5× at full integrity
+    const weapMult  = MURDER_DATA.weaponMultipliers[this.weaponTier] || 1.0;
+    const earlyBird = 1 + (VI.GAME.EARLY_BIRD_BONUS != null ? VI.GAME.EARLY_BIRD_BONUS : 0.15);
+    const noClue    = VI.GAME.NO_CLUE_BONUS_MULT || 1.20;
+    return Math.round(bet * suspMult * foldMult * weapMult * earlyBird * noClue);
+  }
+
   _folderMultiplier(pct) {
     // GDD: lerp 0.2× (at 20% integrity) → 1.5× (at 100%)
     const clamped = Math.max(0.2, Math.min(1.0, pct));

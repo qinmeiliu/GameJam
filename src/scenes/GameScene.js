@@ -1189,12 +1189,46 @@ class GameScene extends Phaser.Scene {
     const pw = 700, ph = 380;
 
     const g = this.add.graphics();
+
+    // ── Folder tab at top-left of the panel ───────────────────
+    // A trapezoidal tab sticking up out of the panel, like an actual
+    // manila folder filing tab. Reinforces the "case file" metaphor.
+    const tabW = 130, tabH = 26;
+    const tabX = cx - pw/2 + 60;   // offset from panel left edge
+    const tabY = cy - ph/2;        // sits ON the panel's top edge
+    const tabPts = [
+      { x: tabX,            y: tabY - tabH },         // top-left
+      { x: tabX + tabW - 14, y: tabY - tabH },        // top-right (with slight bevel)
+      { x: tabX + tabW,     y: tabY - 2 },            // angled corner down to panel edge
+      { x: tabX,            y: tabY - 2 },            // back to bottom-left of tab
+    ];
+    g.fillStyle(VI.COLORS.PANEL_SURFACE, 0.98);
+    g.fillPoints(tabPts, true);
+    g.lineStyle(2, VI.COLORS.GOLD, 0.9);
+    g.strokePoints(tabPts.slice(0, 3), false);        // only the top + right-bevel stroke, panel will cover the bottom
+
+    // ── Main folder body ──────────────────────────────────────
     g.fillStyle(VI.COLORS.PANEL_SURFACE, 0.98);
     g.fillRoundedRect(cx - pw/2, cy - ph/2, pw, ph, 14);
     g.lineStyle(8, VI.COLORS.GOLD, 0.12);
     g.strokeRoundedRect(cx - pw/2, cy - ph/2, pw, ph, 14);
     g.lineStyle(2, VI.COLORS.GOLD, 0.9);
     g.strokeRoundedRect(cx - pw/2, cy - ph/2, pw, ph, 14);
+
+    // ── Paper-grain horizontal lines down the LEFT margin ─────
+    // Faint gold tick marks evoke ruled notepaper inside the folder.
+    g.lineStyle(1, VI.COLORS.GOLD, 0.15);
+    const margin = 20;
+    for (let i = 1; i <= 6; i++) {
+      const ty = cy - ph/2 + 60 + i * 44;
+      g.lineBetween(cx - pw/2 + margin, ty, cx - pw/2 + margin + 10, ty);
+    }
+
+    // Tab label: small TAB tag stamped on the folder tab
+    this.add.text(tabX + 14, tabY - tabH + 7, 'CASE', {
+      fontFamily: VI.FONTS.HEADING, fontSize: '10px',
+      color: VI.HEX.GOLD, letterSpacing: 5,
+    });
 
     // Header strip
     const header = this.add.text(cx - pw/2 + 28, cy - ph/2 + 26, 'CASE FILE', {
@@ -1209,6 +1243,14 @@ class GameScene extends Phaser.Scene {
       color: VI.HEX.CYAN, alpha: 0.6,
     }).setOrigin(1, 0);
     const caseNum = this._cfCaseNum;
+
+    // Weapon tier badge sits just below the case number, right-aligned.
+    // Common/uncommon/rare are colored differently; rare also fires the
+    // sparkle hype around the panel from _showCaseFile.
+    this._cfWeaponTier = this.add.text(cx + pw/2 - 28, cy - ph/2 + 42, '', {
+      fontFamily: VI.FONTS.HEADING, fontSize: '10px',
+      letterSpacing: 5,
+    }).setOrigin(1, 0);
 
     const sep = this.add.graphics();
     sep.lineStyle(1, VI.COLORS.CYAN, 0.4);
@@ -1267,7 +1309,7 @@ class GameScene extends Phaser.Scene {
       const W = this.scale.width;
       const dR = 105;
       const dx = Math.round(W * 0.82);          // center of right panel column (~1050)
-      const dy = 198;                            // upper portion of clue market area; caption at ~321 stays inside
+      const dy = 220;                            // pushed below the top cyan bar so deerstalker isn't clipped
 
       this._cfDucky = this.add.image(dx, dy, 'ducky-investigating');
       this._cfDucky.setDisplaySize(dR * 2.05, dR * 2.05);
@@ -1294,11 +1336,15 @@ class GameScene extends Phaser.Scene {
 
     // Store every element so we can show/hide as a group
     this._caseFileElements = [g, header, caseNum, sep, eyebrow,
-      this._cfVictim, this._cfTitle, this._cfNarrative, this._cfMotive, this._cfCTA];
+      this._cfVictim, this._cfTitle, this._cfNarrative, this._cfMotive, this._cfCTA,
+      this._cfWeaponTier];
     if (this._cfDucky)      this._caseFileElements.push(this._cfDucky);
     if (this._cfDuckyFrame) this._caseFileElements.push(this._cfDuckyFrame);
     if (this._cfDuckyLabel) this._caseFileElements.push(this._cfDuckyLabel);
     this._caseFileElements.forEach(e => e.setAlpha(0));
+
+    // Stash panel center + dimensions for the rare-tier sparkle hype
+    this._cfPanelBounds = { cx, cy, pw, ph };
   }
 
   _showCaseFile() {
@@ -1318,6 +1364,22 @@ class GameScene extends Phaser.Scene {
     if (this._cfCaseNum) {
       const n = 1 + Math.floor(Math.random() * 999);
       this._cfCaseNum.setText('#' + String(n).padStart(3, '0'));
+    }
+
+    // Weapon tier badge — color-coded with rare getting the gold + sparkle hype
+    if (this._cfWeaponTier) {
+      this._clearCaseFileSparkles();   // clear any leftover from previous round
+      if (r.weaponTier === 'rare') {
+        this._cfWeaponTier.setText('★  RARE WEAPON  ★').setColor(VI.HEX.GOLD)
+          .setShadow(0, 0, VI.HEX.GOLD, 8, true);
+        this._spawnCaseFileSparkles();
+      } else if (r.weaponTier === 'uncommon') {
+        this._cfWeaponTier.setText('UNCOMMON WEAPON').setColor(VI.HEX.VI_AMBER)
+          .setShadow(0, 0, '#000', 0, false);
+      } else {
+        this._cfWeaponTier.setText('COMMON WEAPON').setColor('#888')
+          .setShadow(0, 0, '#000', 0, false);
+      }
     }
 
     // Staggered fade-in
@@ -1357,6 +1419,49 @@ class GameScene extends Phaser.Scene {
         duration: 220, ease: 'Cubic.easeIn',
       });
     });
+    this._clearCaseFileSparkles();
+  }
+
+  // Rare-weapon hype: 16 gold sparkles scattered around the case file panel,
+  // each twinkling on its own random alpha cycle. Tracked in
+  // `_cfHypeSparkles` so _hideCaseFile / new round can tear them down.
+  _spawnCaseFileSparkles() {
+    if (!this._cfPanelBounds) return;
+    const { cx, cy, pw, ph } = this._cfPanelBounds;
+    if (!this._cfHypeSparkles) this._cfHypeSparkles = [];
+
+    const N = 16;
+    const inset = 14;
+    for (let i = 0; i < N; i++) {
+      // Distribute around panel perimeter — top, bottom, or sides.
+      const side = Math.floor(Math.random() * 4);
+      let x, y;
+      if (side === 0) { x = cx - pw/2 + inset + Math.random() * (pw - inset*2); y = cy - ph/2 + inset + Math.random() * 16; }
+      else if (side === 1) { x = cx - pw/2 + inset + Math.random() * (pw - inset*2); y = cy + ph/2 - inset - Math.random() * 16; }
+      else if (side === 2) { x = cx - pw/2 + inset + Math.random() * 18; y = cy - ph/2 + inset + Math.random() * (ph - inset*2); }
+      else                 { x = cx + pw/2 - inset - Math.random() * 18; y = cy - ph/2 + inset + Math.random() * (ph - inset*2); }
+
+      const dot = this.add.graphics();
+      const r = 1.6 + Math.random() * 1.2;
+      dot.fillStyle(VI.COLORS.GOLD, 1);
+      dot.fillCircle(x, y, r);
+      dot.fillStyle(VI.COLORS.GOLD, 0.35);
+      dot.fillCircle(x, y, r * 2.4);
+      this._cfHypeSparkles.push(dot);
+      this.tweens.add({
+        targets: dot,
+        alpha: { from: 0.35, to: 1 },
+        duration: 700 + Math.random() * 900,
+        delay: Math.random() * 600,
+        yoyo: true, repeat: -1, ease: 'Sine.easeInOut',
+      });
+    }
+  }
+
+  _clearCaseFileSparkles() {
+    if (!this._cfHypeSparkles) return;
+    this._cfHypeSparkles.forEach(d => { try { d.destroy(); } catch (e) { /* swallow */ } });
+    this._cfHypeSparkles = [];
   }
 
   // ── Back-to-Lobby button (BETTING phase only) ──────────────

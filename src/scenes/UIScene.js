@@ -441,15 +441,51 @@ class UIScene extends Phaser.Scene {
       this._fadeBetStack();
     });
 
+    // ── Live POTENTIAL WIN preview ────────────────────────────
+    // Sits in the gap between the CONFIRM BET button (right edge ≈ x=682)
+    // and the game log (left edge ≈ x=819) — empty space during BETTING.
+    // Recalculates every chip-click via _refreshBetDisplay so the player
+    // sees the max possible payout grow as they stack chips.
+    const pwX = 750;
+    const pwLbl = this.add.text(pwX, by - 16, 'WIN UP TO', {
+      fontFamily: VI.FONTS.BODY, fontSize: '10px',
+      color: VI.HEX.GOLD, letterSpacing: 4,
+    }).setOrigin(0.5);
+    this._potentialWinText = this.add.text(pwX, by + 6, '$0', {
+      fontFamily: VI.FONTS.MONO, fontSize: '22px', color: VI.HEX.GOLD,
+      shadow: { blur: 8, color: VI.HEX.GOLD, fill: true },
+    }).setOrigin(0.5);
+    // Subtle ambient pulse so the preview stays eye-catching even when bet=0
+    this._potentialWinPulse = this.tweens.add({
+      targets: [pwLbl, this._potentialWinText],
+      alpha: { from: 0.72, to: 1 },
+      duration: 1100, yoyo: true, repeat: -1, ease: 'Sine.easeInOut',
+    });
+
     // Track every bet-builder element so we can show/hide as a group.
     // _buildChipTray already initialised the array; we just append here.
     if (!this._betBuilderRefs) this._betBuilderRefs = [];
-    this._betBuilderRefs.push(lbl, this._betText, clrTxt, clrZone, cfG, cfLbl, cfZone);
+    this._betBuilderRefs.push(lbl, this._betText, clrTxt, clrZone, cfG, cfLbl, cfZone,
+      pwLbl, this._potentialWinText);
   }
 
   _refreshBetDisplay(amt) {
     this._accumulatedBet = amt;
     if (this._betText) this._betText.setText(`$${amt.toLocaleString()}`);
+    this._refreshPotentialWin(amt);
+  }
+
+  // Live POTENTIAL WIN — recomputes the best-case payout each chip-click.
+  // Pulls suspect count / weapon tier from the live RoundController so the
+  // number reflects this round's weapon (rare = 3.0× big number).
+  _refreshPotentialWin(amt) {
+    if (!this._potentialWinText) return;
+    const round = this._gs && this._gs.gs && this._gs.gs.round;
+    let potential = 0;
+    if (round && typeof round.getMaxPotentialPayout === 'function') {
+      potential = round.getMaxPotentialPayout(amt);
+    }
+    this._potentialWinText.setText(`$${potential.toLocaleString()}`);
   }
 
   // ── Action card strip ──────────────────────────────────────
@@ -615,6 +651,9 @@ class UIScene extends Phaser.Scene {
     this._accumulatedBet = 0;
     this._currentBet     = 0;
     if (this._betText) this._betText.setText('$0');
+    // Reset POTENTIAL WIN to $0 — fresh round, no bet placed yet. Subsequent
+    // chip-clicks will repopulate it via _refreshBetDisplay.
+    this._refreshPotentialWin(0);
     // Wipe the previous round's SUSPECT label so the bottom-left doesn't
     // keep showing "THE MIME" or whoever was picked last time.
     this._clearSuspectLabel();

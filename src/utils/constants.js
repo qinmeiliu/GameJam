@@ -101,10 +101,17 @@ const VI = {
     // Slots 0–2 unused. Breaks v0.3's constant-RTP property on purpose:
     // higher suspect count = better RTP, lower win frequency.
     SUSPECT_MULTS: [0, 0, 0, 1.8, 2.5, 3.2, 4.0],
-    // Acc#2 payout cap — was 0.40 in v0.4, tightened in v0.5.
-    ACC2_PENALTY:           0.30,
+    // Acc#2 payout cap — v0.4 was 0.40, v0.5 dropped to 0.30, v0.6 raised to
+    // 0.55 so a SECOND-CHANCE win actually feels like a win (and not a small
+    // refund). At 0.55, typical Acc#2 wins land at breakeven-to-positive.
+    ACC2_PENALTY:           0.55,
     // No-clue bonus multiplier applied to gross iff cluesPurchased === 0.
-    NO_CLUE_BONUS_MULT:     1.20,
+    NO_CLUE_BONUS_MULT:     1.25,
+    // DEAD-EYE side bet — opt-in pre-round wager equal to 10% of main bet.
+    // Pays out only on a correct Acc#1; lost on Acc#2 win OR loss.
+    // Payout formula: wager × (suspectCount - 0.3) — fair-ish for a 1/N bet.
+    DEAD_EYE_WAGER_FRAC:    0.10,
+    DEAD_EYE_PAYOUT_SHIFT:  0.30,    // payout = wager × (N - this)
     // Order-based clue cost fractions (of bet). First clue cheap; second expensive.
     CLUE_COST_FIRST_FRAC:   0.10,
     CLUE_COST_SECOND_FRAC:  0.20,

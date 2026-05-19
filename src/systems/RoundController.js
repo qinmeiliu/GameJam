@@ -27,8 +27,30 @@ class RoundController {
     this._earlyBird     = false;   // true if bet was locked while folder > 60%
     this._cashedOut     = false;   // CASH_OUT short-circuits the reveal
     this._lockedBet     = 0;       // bet amount snapshot at confirm time — drives clue costs
+    this._deadEyeWager  = 0;       // DEAD-EYE side bet — paid only on Acc#1 correct
 
     this._generate();
+  }
+
+  // ── DEAD-EYE side bet ────────────────────────────────────
+  // Opt-in pre-round wager. Pays out if and only if the player nails the
+  // killer on FIRST accusation (Acc#1). Forfeited on Acc#2 win or any loss.
+  // Wager is set by UIScene on bet confirm; main GameScene deducts it from
+  // balance at confirm time and credits any payout via _resolveWin.
+  setDeadEyeWager(wager) {
+    this._deadEyeWager = Math.max(0, Math.round(wager || 0));
+  }
+  getDeadEyeWager() {
+    return this._deadEyeWager;
+  }
+  // Returns the side-bet PAYOUT (gross including stake) on Acc#1 correct,
+  // or 0 if not eligible. Uses suspectCount-based payout shift so the bet
+  // scales with table size: N=3 pays 2.7×, N=4 pays 3.7×, ... N=6 pays 5.7×.
+  calculateDeadEyePayout(secondAccusation) {
+    if (this._deadEyeWager <= 0) return 0;
+    if (secondAccusation)        return 0;        // Acc#2 forfeits the side bet
+    const shift = (VI.GAME.DEAD_EYE_PAYOUT_SHIFT != null) ? VI.GAME.DEAD_EYE_PAYOUT_SHIFT : 0.30;
+    return Math.round(this._deadEyeWager * (this.suspectCount - shift));
   }
 
   // ── Round Generation ──────────────────────────────────────
@@ -249,7 +271,8 @@ class RoundController {
     if (this._actionUsed['SPLIT'])       payout *= 0.5;
     if (this._chaosRoll !== null)        payout *= this._chaosRoll;
 
-    // Accusation #2 penalty (v0.5: gross × 0.30, was 0.40)
+    // Accusation #2 penalty (v0.6: gross × 0.55 — was 0.30 in v0.5, raised
+    // so Acc#2 wins feel like wins instead of partial losses)
     if (isSecondAccusation) payout *= VI.GAME.ACC2_PENALTY;
 
     return Math.round(payout);
@@ -321,9 +344,13 @@ class RoundController {
   }
 
   _folderMultiplier(pct) {
-    // GDD: lerp 0.2× (at 20% integrity) → 1.5× (at 100%)
+    // v0.6: lerp 0.4× (at 20% integrity floor) → 1.5× (at 100%).
+    // Floor was 0.2× in v0.5 which made slow-folder Acc#2 wins feel like
+    // punishment. 0.4× softens the worst case while keeping folder pressure
+    // meaningful — at 50% integrity you still get ~0.81× and the gap from
+    // bet-confirmation speed remains a real choice.
     const clamped = Math.max(0.2, Math.min(1.0, pct));
-    return 0.2 + ((clamped - 0.2) / 0.8) * 1.3;   // 0.2 + 1.3 = 1.5 at full
+    return 0.4 + ((clamped - 0.2) / 0.8) * 1.1;   // 0.4 + 1.1 = 1.5 at full
   }
 
   // ── Action cards (GDD v0.4 canonical 8) ───────────────────

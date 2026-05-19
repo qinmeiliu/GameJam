@@ -1903,17 +1903,24 @@ class GameScene extends Phaser.Scene {
 
   // ── Accusation flow ────────────────────────────────────────
 
-  _onBetConfirmed(amt) {
+  _onBetConfirmed(payload) {
     // Bets can only be placed in BETTING (before suspects appear).
     if (this.gs.phase !== VI.PHASES.BETTING) return;
+
+    // Payload shape: { bet, deadEyeWager } from UIScene. Tolerate the older
+    // bare-number shape in case anything still emits the simple form.
+    const amt   = (typeof payload === 'object') ? payload.bet : payload;
+    const deAmt = (typeof payload === 'object') ? (payload.deadEyeWager || 0) : 0;
+
     this.gs.bet = amt;
 
     // Chips leave the bankroll the moment they hit the table — visceral
     // feedback the player asked for. The resolution math (_resolveWin/Loss)
-    // accounts for this upfront deduction.
-    this.gs.balance = Math.max(0, this.gs.balance - amt);
+    // accounts for this upfront deduction. DEAD-EYE wager comes out of the
+    // same wallet at the same time so the player sees the full damage.
+    const totalCost = amt + deAmt;
+    this.gs.balance = Math.max(0, this.gs.balance - totalCost);
     this._balanceText.setText(`$${this.gs.balance.toLocaleString()}`);
-    // Make the balance flash magenta briefly so it's obvious it moved
     this.tweens.add({
       targets: this._balanceText,
       alpha: { from: 0.4, to: 1 }, duration: 320, ease: 'Cubic.easeOut',
@@ -1924,8 +1931,16 @@ class GameScene extends Phaser.Scene {
       // of the bet — clue cost reads it from there, not from scene state.
       this.gs.round.registerBetLock(this._folderPct, amt);
     }
+    // Snapshot the side wager on the round controller so resolution math
+    // can pay it out (Acc#1 win) or forfeit it (Acc#2 win or loss).
+    if (this.gs.round && this.gs.round.setDeadEyeWager) {
+      this.gs.round.setDeadEyeWager(deAmt);
+    }
     const eb = (this._folderPct > 0.60) ? '  ★ EARLY BIRD +15%' : '';
     this._addClue(`💰 Bet placed: $${amt} (balance now $${this.gs.balance.toLocaleString()})${eb}`, VI.HEX.VI_AMBER);
+    if (deAmt > 0) {
+      this._addClue(`👁  DEAD-EYE wager: $${deAmt} (pays on first call only)`, VI.HEX.GOLD);
+    }
 
     // Tell UIScene so any balance-aware checks (e.g. chip affordability)
     // see the updated number on the next interaction.
@@ -2062,14 +2077,30 @@ class GameScene extends Phaser.Scene {
     // Bet was deducted on confirm. On a win, credit the FULL gross payout
     // (which includes the original stake plus winnings).
     const payout = gs.round.calculatePayout(gs.bet, gs.selectedIdx, this._folderPct, { secondAccusation });
-    const net    = payout - gs.bet;                   // net profit (for display)
-    gs.balance   = Math.round(gs.balance + payout);
+
+    // DEAD-EYE side bet pays out ONLY on a correct Acc#1. Bonus is added
+    // on top of the main payout so the player walks away with both stakes
+    // returned and the side-bet bonus.
+    const dePayout = (gs.round.calculateDeadEyePayout)
+      ? gs.round.calculateDeadEyePayout(secondAccusation)
+      : 0;
+    const deWager = (gs.round.getDeadEyeWager) ? gs.round.getDeadEyeWager() : 0;
+
+    const totalPayout = payout + dePayout;
+    const totalStake  = gs.bet + deWager;
+    const net    = totalPayout - totalStake;          // net profit (for display)
+    gs.balance   = Math.round(gs.balance + totalPayout);
     this._balanceText.setText(`$${gs.balance.toLocaleString()}`);
     this.events.emit('game:balance_update', gs.balance);
 
-    const tag = secondAccusation ? ' (Acc#2 — 30% cap)' : '';
+    const tag = secondAccusation ? ' (Acc#2 — 55% cap)' : '';
     this._addClue(`✅ CORRECT! ${gs.round.suspects[gs.selectedIdx].name} is the killer!${tag}`, VI.HEX.GOLD);
-    this._addClue(`💰 PAYOUT: +$${Math.round(net).toLocaleString()}`, VI.HEX.GOLD);
+    this._addClue(`💰 PAYOUT: +$${Math.round(payout).toLocaleString()}`, VI.HEX.GOLD);
+    if (dePayout > 0) {
+      this._addClue(`👁  DEAD-EYE HIT: +$${dePayout.toLocaleString()}`, VI.HEX.GOLD);
+    } else if (deWager > 0) {
+      this._addClue(`👁  DEAD-EYE missed (needed Acc#1).`, VI.HEX.MAGENTA);
+    }
     this._markGuiltySuspect(gs.selectedIdx);
     this._showResultOverlay(true, net);
     this.events.emit('game:win', { payout: net, balance: gs.balance });
@@ -2086,8 +2117,14 @@ class GameScene extends Phaser.Scene {
       this.events.emit('game:balance_update', gs.balance);
       this._addClue(`🛡 INSURANCE refund: +$${refund.toLocaleString()}`, VI.HEX.CYAN);
     }
-    const lost = gs.bet - refund;                     // net loss (for display)
+    // DEAD-EYE wager is forfeit on any loss path. Note it in the loss total
+    // so the scoreboard's red number reflects the full damage.
+    const deWager = (gs.round.getDeadEyeWager) ? gs.round.getDeadEyeWager() : 0;
+    const lost = gs.bet - refund + deWager;            // net loss (for display)
     this._addClue(`❌ WRONG AGAIN! Killer was ${gs.round.suspects[gs.round.killerIdx].name}.`, VI.HEX.VI_RED);
+    if (deWager > 0) {
+      this._addClue(`👁  DEAD-EYE wager lost.`, VI.HEX.MAGENTA);
+    }
     this._addClue(`💸 NET LOST: -$${lost.toLocaleString()}`, VI.HEX.MAGENTA);
     this._markGuiltySuspect(gs.round.killerIdx);
     this._showResultOverlay(false, -lost);
@@ -2199,7 +2236,7 @@ class GameScene extends Phaser.Scene {
         if (bd.earlyBird) parts.push('+15% early');
         if (bd.noClue)    parts.push('+20% no-clue');
       }
-      if (this.gs.wrongCount === 1) parts.push('Acc#2 ×0.30');
+      if (this.gs.wrongCount === 1) parts.push('Acc#2 ×0.55');
 
       // Smaller font + tighter separator + wordWrap so long breakdowns
       // (all bonuses active + Acc#2 modifier) fold to a second line cleanly

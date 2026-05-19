@@ -435,8 +435,20 @@ class UIScene extends Phaser.Scene {
         this._showToast('Not enough balance!', VI.HEX.MAGENTA, 1200); return;
       }
       this._currentBet = this._accumulatedBet;
-      gs.events.emit('ui:bet_confirmed', this._currentBet);
-      this._showToast(`Bet confirmed: $${this._currentBet}`, VI.HEX.VI_AMBER, 900);
+      // DEAD-EYE wager = 10% of main bet, only if toggled on
+      const deWager = this._deadEyeActive
+        ? Math.round(this._currentBet * (VI.GAME.DEAD_EYE_WAGER_FRAC || 0.10))
+        : 0;
+      // Balance must cover BOTH the main bet AND the side wager
+      if (this._currentBet + deWager > gs.gs.balance) {
+        this._showToast(`Need $${(this._currentBet + deWager).toLocaleString()} for bet + DEAD-EYE`, VI.HEX.MAGENTA, 1500);
+        return;
+      }
+      gs.events.emit('ui:bet_confirmed', { bet: this._currentBet, deadEyeWager: deWager });
+      const toastMsg = deWager > 0
+        ? `Bet $${this._currentBet} + DEAD-EYE $${deWager}`
+        : `Bet confirmed: $${this._currentBet}`;
+      this._showToast(toastMsg, VI.HEX.VI_AMBER, 900);
       // Chips have been "pushed to the table" — fade the pile.
       this._fadeBetStack();
     });
@@ -462,11 +474,64 @@ class UIScene extends Phaser.Scene {
       duration: 1100, yoyo: true, repeat: -1, ease: 'Sine.easeInOut',
     });
 
+    // ── DEAD-EYE side bet toggle ──────────────────────────────
+    // Opt-in pre-round wager. Pays out only on Acc#1 correct, forfeit
+    // otherwise. Wager is 10% of main bet (calculated on confirm).
+    // Position: above the chip tray, on the left.
+    const deX = 60, deY = this.scale.height - 130, deW = 340, deH = 44;
+    const deG = this.add.graphics();
+    const deTitle = this.add.text(deX + 56, deY + 12, 'DEAD-EYE', {
+      fontFamily: VI.FONTS.HEADING, fontSize: '14px',
+      color: VI.HEX.GOLD, letterSpacing: 4,
+    }).setOrigin(0, 0.5);
+    const deCaption = this.add.text(deX + 56, deY + 30, 'Pay +10% to win big on FIRST call', {
+      fontFamily: VI.FONTS.BODY, fontSize: '10px',
+      color: VI.HEX.CREAM, letterSpacing: 1,
+    }).setOrigin(0, 0.5);
+    // Checkbox at left
+    const deBox = this.add.graphics();
+    const deTick = this.add.text(deX + 26, deY + 22, '', {
+      fontFamily: VI.FONTS.HEADING, fontSize: '20px',
+      color: VI.HEX.GOLD,
+    }).setOrigin(0.5);
+
+    this._deadEyeActive = false;
+    const drawDe = (hover) => {
+      deG.clear();
+      const fill = this._deadEyeActive ? VI.COLORS.GOLD : VI.COLORS.PANEL_SURFACE;
+      const fillAlpha = this._deadEyeActive ? 0.18 : 0.7;
+      const strokeColor = this._deadEyeActive ? VI.COLORS.GOLD : (hover ? VI.COLORS.GOLD : VI.COLORS.CYAN);
+      const strokeAlpha = this._deadEyeActive ? 1 : (hover ? 0.95 : 0.4);
+      deG.fillStyle(fill, fillAlpha);
+      deG.fillRoundedRect(deX, deY, deW, deH, 8);
+      deG.lineStyle(this._deadEyeActive ? 2 : 1, strokeColor, strokeAlpha);
+      deG.strokeRoundedRect(deX, deY, deW, deH, 8);
+
+      deBox.clear();
+      deBox.lineStyle(2, this._deadEyeActive ? VI.COLORS.GOLD : VI.COLORS.CYAN, 0.9);
+      deBox.strokeRoundedRect(deX + 14, deY + 12, 22, 22, 4);
+      deTick.setText(this._deadEyeActive ? '✓' : '');
+    };
+    drawDe(false);
+
+    const deZone = this.add.zone(deX + deW/2, deY + deH/2, deW, deH).setInteractive({ cursor: 'pointer' });
+    deZone.on('pointerover', () => drawDe(true));
+    deZone.on('pointerout',  () => drawDe(false));
+    deZone.on('pointerup', () => {
+      // Only valid during BETTING — gameplay phases lock the toggle
+      const gs = this._gs;
+      if (gs && gs.gs.phase !== VI.PHASES.BETTING) return;
+      this._deadEyeActive = !this._deadEyeActive;
+      drawDe(true);
+      this._refreshPotentialWin(this._accumulatedBet);   // preview reflects side-bet upside
+    });
+
     // Track every bet-builder element so we can show/hide as a group.
     // _buildChipTray already initialised the array; we just append here.
     if (!this._betBuilderRefs) this._betBuilderRefs = [];
     this._betBuilderRefs.push(lbl, this._betText, clrTxt, clrZone, cfG, cfLbl, cfZone,
-      pwLbl, this._potentialWinText);
+      pwLbl, this._potentialWinText,
+      deG, deBox, deTitle, deCaption, deTick, deZone);
   }
 
   _refreshBetDisplay(amt) {
@@ -477,13 +542,21 @@ class UIScene extends Phaser.Scene {
 
   // Live POTENTIAL WIN — recomputes the best-case payout each chip-click.
   // Pulls suspect count / weapon tier from the live RoundController so the
-  // number reflects this round's weapon (rare = 3.0× big number).
+  // number reflects this round's weapon (rare = 3.0× big number). If
+  // DEAD-EYE is toggled, adds the side-bet payout on top.
   _refreshPotentialWin(amt) {
     if (!this._potentialWinText) return;
     const round = this._gs && this._gs.gs && this._gs.gs.round;
     let potential = 0;
     if (round && typeof round.getMaxPotentialPayout === 'function') {
       potential = round.getMaxPotentialPayout(amt);
+    }
+    // Add DEAD-EYE upside (Acc#1 best case) when the toggle is active
+    if (this._deadEyeActive && amt > 0 && round && round.suspectCount) {
+      const wagerFrac = VI.GAME.DEAD_EYE_WAGER_FRAC || 0.10;
+      const shift     = VI.GAME.DEAD_EYE_PAYOUT_SHIFT || 0.30;
+      const wager     = Math.round(amt * wagerFrac);
+      potential += Math.round(wager * (round.suspectCount - shift));
     }
     this._potentialWinText.setText(`$${potential.toLocaleString()}`);
   }
@@ -650,6 +723,7 @@ class UIScene extends Phaser.Scene {
   _onRoundStart(data) {
     this._accumulatedBet = 0;
     this._currentBet     = 0;
+    this._deadEyeActive  = false;       // toggle resets every round
     if (this._betText) this._betText.setText('$0');
     // Reset POTENTIAL WIN to $0 — fresh round, no bet placed yet. Subsequent
     // chip-clicks will repopulate it via _refreshBetDisplay.

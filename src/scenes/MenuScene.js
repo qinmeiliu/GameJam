@@ -411,7 +411,9 @@ class MenuScene extends Phaser.Scene {
     overlay.fillRect(0, 0, width, height);
     overlay.setDepth(100);
 
-    const pw = 640, ph = 460;
+    // ph raised from 460→580 to accommodate the 6-item body. v0.5 had 5
+    // items; adding DEAD-EYE pushed the bottom items off the panel.
+    const pw = 660, ph = 580;
     const panel = this.add.graphics().setDepth(101);
     panel.fillStyle(VI.COLORS.PANEL_SURFACE, 1);
     panel.fillRoundedRect(cx - pw/2, cy - ph/2, pw, ph, 14);

@@ -267,7 +267,7 @@ class GameScene extends Phaser.Scene {
     this._timerElapsed = 0;
     this._timerExpired = false;
     this._updateTimerText();
-    this._addClue('🎲 The cards are dealt. Buy clues, or stay clueless for +20%.', VI.HEX.CYAN);
+    this._addClue('🎲 The cards are dealt. Buy clues, or stay clueless for +25%.', VI.HEX.CYAN);
 
     // Open the Clue Market (top half of right panel)
     this._setClueMarketVisible(true);
@@ -1422,6 +1422,11 @@ class GameScene extends Phaser.Scene {
     if (!this._caseFileElements) return;
     // Kill the CTA pulse — otherwise it loops alpha 0.6→1 and the fade fails.
     if (this._cfCTAPulse) { this._cfCTAPulse.stop(); this._cfCTAPulse = null; }
+    // Stop the Ducky breath tween explicitly. It targets [_cfDucky,
+    // _cfDuckyMask, _cfDuckyFrame] but the killTweensOf loop below only
+    // walks _caseFileElements — which excludes the mask. Without this stop,
+    // the tween orphans onto the mask Graphics and accumulates each round.
+    if (this._cfDuckyBreath) { this._cfDuckyBreath.stop(); this._cfDuckyBreath = null; }
     this._caseFileElements.forEach(e => {
       this.tweens.killTweensOf(e);
       this.tweens.add({
@@ -1633,7 +1638,7 @@ class GameScene extends Phaser.Scene {
     }).setOrigin(0.5);
 
     // No-Clue Bonus indicator (pulses while active; greyed once any clue bought)
-    this._noClueBonusLbl = this.add.text(fx + fw / 2, fy + 40, '✨  NO-CLUE BONUS  ×1.20', {
+    this._noClueBonusLbl = this.add.text(fx + fw / 2, fy + 40, '✨  NO-CLUE BONUS  ×1.25', {
       fontFamily: VI.FONTS.HEADING, fontSize: '11px',
       color: VI.HEX.GOLD, letterSpacing: 4,
     }).setOrigin(0.5);
@@ -1779,7 +1784,7 @@ class GameScene extends Phaser.Scene {
     if (!this._noClueBonusLbl) return;
     const active = this.gs.round && this.gs.round.isNoClueBonusActive();
     if (active) {
-      this._noClueBonusLbl.setText('✨  NO-CLUE BONUS  ×1.20').setColor(VI.HEX.GOLD).setAlpha(1);
+      this._noClueBonusLbl.setText('✨  NO-CLUE BONUS  ×1.25').setColor(VI.HEX.GOLD).setAlpha(1);
     } else {
       if (this._noClueBonusPulse) { this._noClueBonusPulse.stop(); }
       this._noClueBonusLbl.setText('— NO-CLUE BONUS FORFEITED —').setColor('#888888').setAlpha(0.55);
@@ -2234,7 +2239,7 @@ class GameScene extends Phaser.Scene {
         parts.push(`${bd.foldMult.toFixed(2)}× folder`);
         parts.push(`${bd.weapMult.toFixed(1)}× weapon`);
         if (bd.earlyBird) parts.push('+15% early');
-        if (bd.noClue)    parts.push('+20% no-clue');
+        if (bd.noClue)    parts.push('+25% no-clue');
       }
       if (this.gs.wrongCount === 1) parts.push('Acc#2 ×0.55');
 

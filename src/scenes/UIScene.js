@@ -36,6 +36,12 @@ class UIScene extends Phaser.Scene {
     this._betStackChips      = null;   // physical chip pile next to the bet counter
     this._betStackX          = 0;
     this._betStackBaseY      = 0;
+    // Refs that survive scene restarts and need explicit reset, otherwise
+    // tweens target destroyed GameObjects and toast positions drift.
+    this._potentialWinText   = null;
+    this._potentialWinPulse  = null;
+    this._toastSlots         = null;
+    this._deadEyeActive      = false;
   }
 
   create() {
@@ -496,33 +502,21 @@ class UIScene extends Phaser.Scene {
     }).setOrigin(0.5);
 
     this._deadEyeActive = false;
-    const drawDe = (hover) => {
-      deG.clear();
-      const fill = this._deadEyeActive ? VI.COLORS.GOLD : VI.COLORS.PANEL_SURFACE;
-      const fillAlpha = this._deadEyeActive ? 0.18 : 0.7;
-      const strokeColor = this._deadEyeActive ? VI.COLORS.GOLD : (hover ? VI.COLORS.GOLD : VI.COLORS.CYAN);
-      const strokeAlpha = this._deadEyeActive ? 1 : (hover ? 0.95 : 0.4);
-      deG.fillStyle(fill, fillAlpha);
-      deG.fillRoundedRect(deX, deY, deW, deH, 8);
-      deG.lineStyle(this._deadEyeActive ? 2 : 1, strokeColor, strokeAlpha);
-      deG.strokeRoundedRect(deX, deY, deW, deH, 8);
-
-      deBox.clear();
-      deBox.lineStyle(2, this._deadEyeActive ? VI.COLORS.GOLD : VI.COLORS.CYAN, 0.9);
-      deBox.strokeRoundedRect(deX + 14, deY + 12, 22, 22, 4);
-      deTick.setText(this._deadEyeActive ? '✓' : '');
-    };
-    drawDe(false);
+    // Cache the geometry + visual refs so _redrawDeadEye() can be called from
+    // anywhere (e.g. _onRoundStart needs to repaint the unchecked state when
+    // the toggle resets between rounds — the closure used to swallow that).
+    this._deadEyeRefs = { deG, deBox, deTick, deX, deY, deW, deH };
+    this._redrawDeadEye(false);
 
     const deZone = this.add.zone(deX + deW/2, deY + deH/2, deW, deH).setInteractive({ cursor: 'pointer' });
-    deZone.on('pointerover', () => drawDe(true));
-    deZone.on('pointerout',  () => drawDe(false));
+    deZone.on('pointerover', () => this._redrawDeadEye(true));
+    deZone.on('pointerout',  () => this._redrawDeadEye(false));
     deZone.on('pointerup', () => {
       // Only valid during BETTING — gameplay phases lock the toggle
       const gs = this._gs;
       if (gs && gs.gs.phase !== VI.PHASES.BETTING) return;
       this._deadEyeActive = !this._deadEyeActive;
-      drawDe(true);
+      this._redrawDeadEye(true);
       this._refreshPotentialWin(this._accumulatedBet);   // preview reflects side-bet upside
     });
 
@@ -532,6 +526,29 @@ class UIScene extends Phaser.Scene {
     this._betBuilderRefs.push(lbl, this._betText, clrTxt, clrZone, cfG, cfLbl, cfZone,
       pwLbl, this._potentialWinText,
       deG, deBox, deTitle, deCaption, deTick, deZone);
+  }
+
+  // Repaint the DEAD-EYE toggle visual from its current state. Lifted out
+  // of _buildBetDisplay so _onRoundStart (and anyone else) can drive the
+  // redraw — the closure used to swallow off-state resets between rounds.
+  _redrawDeadEye(hover) {
+    const r = this._deadEyeRefs;
+    if (!r) return;
+    const active = this._deadEyeActive;
+    r.deG.clear();
+    const fill        = active ? VI.COLORS.GOLD : VI.COLORS.PANEL_SURFACE;
+    const fillAlpha   = active ? 0.18 : 0.7;
+    const strokeColor = active ? VI.COLORS.GOLD : (hover ? VI.COLORS.GOLD : VI.COLORS.CYAN);
+    const strokeAlpha = active ? 1 : (hover ? 0.95 : 0.4);
+    r.deG.fillStyle(fill, fillAlpha);
+    r.deG.fillRoundedRect(r.deX, r.deY, r.deW, r.deH, 8);
+    r.deG.lineStyle(active ? 2 : 1, strokeColor, strokeAlpha);
+    r.deG.strokeRoundedRect(r.deX, r.deY, r.deW, r.deH, 8);
+
+    r.deBox.clear();
+    r.deBox.lineStyle(2, active ? VI.COLORS.GOLD : VI.COLORS.CYAN, 0.9);
+    r.deBox.strokeRoundedRect(r.deX + 14, r.deY + 12, 22, 22, 4);
+    r.deTick.setText(active ? '✓' : '');
   }
 
   _refreshBetDisplay(amt) {
@@ -724,6 +741,9 @@ class UIScene extends Phaser.Scene {
     this._accumulatedBet = 0;
     this._currentBet     = 0;
     this._deadEyeActive  = false;       // toggle resets every round
+    // Repaint the DEAD-EYE toggle so the checkbox visibly clears — without
+    // this the player sees a still-ticked box and thinks DEAD-EYE is on.
+    if (this._redrawDeadEye) this._redrawDeadEye(false);
     if (this._betText) this._betText.setText('$0');
     // Reset POTENTIAL WIN to $0 — fresh round, no bet placed yet. Subsequent
     // chip-clicks will repopulate it via _refreshBetDisplay.

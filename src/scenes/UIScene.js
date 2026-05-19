@@ -484,7 +484,7 @@ class UIScene extends Phaser.Scene {
       fontFamily: VI.FONTS.HEADING, fontSize: '14px',
       color: VI.HEX.GOLD, letterSpacing: 4,
     }).setOrigin(0, 0.5);
-    const deCaption = this.add.text(deX + 56, deY + 30, 'Pay +10% to win big on FIRST call', {
+    const deCaption = this.add.text(deX + 56, deY + 30, 'Pay +15% to win big on FIRST call', {
       fontFamily: VI.FONTS.BODY, fontSize: '10px',
       color: VI.HEX.CREAM, letterSpacing: 1,
     }).setOrigin(0, 0.5);

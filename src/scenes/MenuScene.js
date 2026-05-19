@@ -21,49 +21,88 @@ class MenuScene extends Phaser.Scene {
     const cx = width / 2;
     const cy = height / 2;
 
-    // ── Background (kept) ─────────────────────────────────────
-    this._drawBackground();
-    this._drawNeonAccents();
+    // ── Cinematic backdrop: ballroom PNG dimmed under a vignette ─
+    // First impression for judges. The ballroom is gold-dominant and
+    // opulent — sets the casino-noir tone immediately. Falls back to the
+    // vector treatment if the PNG hasn't loaded.
+    this._drawCinematicBackdrop();
+
+    // ── Suspect lineup peeking in from corners ────────────────
+    // Three of the cast lurk at the edges as if eavesdropping on the case.
+    // Each drifts gently with a staggered yoyo for ambient motion.
+    this._drawSuspectLineup();
 
     // ── Game Title — QUACKDUNNIT, single hero word ────────────
-    // Cyan back-glow layer, gold front letters, magenta sub-shadow.
-    // Single word means we can go big without breaking the line.
-    const titleY = cy - 110;
+    const titleY = cy - 80;
 
-    // Soft cyan haze behind the title for the Glow-Fi feel
+    // Layered hazes — cyan back-glow, magenta sub-shadow, purple bloom.
     const haze = this.add.graphics();
-    haze.fillStyle(VI.COLORS.CYAN, 0.05);
-    haze.fillEllipse(cx, titleY + 6, 880, 200);
-    haze.fillStyle(VI.COLORS.MAGENTA, 0.04);
-    haze.fillEllipse(cx, titleY + 18, 720, 140);
+    haze.fillStyle(VI.COLORS.VI_PURPLE, 0.20);
+    haze.fillEllipse(cx, titleY + 4, 980, 230);
+    haze.fillStyle(VI.COLORS.CYAN, 0.09);
+    haze.fillEllipse(cx, titleY + 8, 820, 180);
+    haze.fillStyle(VI.COLORS.MAGENTA, 0.06);
+    haze.fillEllipse(cx, titleY + 22, 680, 130);
 
+    // Back-shadow layer — cyan offset behind the gold for chromatic depth
+    const titleBack = this.add.text(cx + 4, titleY + 4, 'QUACKDUNNIT', {
+      fontFamily: VI.FONTS.HEADING,
+      fontSize: '118px',
+      color: VI.HEX.CYAN,
+      letterSpacing: 12,
+    }).setOrigin(0.5).setAlpha(0.55);
+
+    // Front title — gold with heavy glow
     const title = this.add.text(cx, titleY, 'QUACKDUNNIT', {
       fontFamily: VI.FONTS.HEADING,
-      fontSize: '110px',
+      fontSize: '118px',
       color: VI.HEX.GOLD,
       stroke: '#000000',
       strokeThickness: 8,
-      shadow: { blur: 28, color: VI.HEX.GOLD, fill: true },
+      shadow: { blur: 36, color: VI.HEX.GOLD, fill: true },
       letterSpacing: 12,
     }).setOrigin(0.5);
 
-    // Gentle title bob — alive, but subtle
+    // Gentle bob — alive, but subtle
     this.tweens.add({
-      targets: title, y: titleY - 4,
+      targets: [title, titleBack], y: '-=4',
       duration: 1800, yoyo: true, repeat: -1, ease: 'Sine.easeInOut',
     });
 
-    // ── Primary action: PLAY (dominant, centered) ──────────────
-    this._addPrimaryButton(cx, cy + 50, '▶  PLAY', () => this._startGame());
+    // Tagline below title
+    const tagline = this.add.text(cx, titleY + 78, 'A CASINO-NOIR WHODUNNIT', {
+      fontFamily: VI.FONTS.HEADING,
+      fontSize: '15px',
+      color: VI.HEX.CREAM,
+      letterSpacing: 10,
+    }).setOrigin(0.5).setAlpha(0.85);
 
-    // ── Secondary action: HOW TO PLAY (one button only) ────────
-    this._addSecondaryButton(cx, cy + 130, 'HOW TO PLAY', () => this._showHelp());
+    // Faint cyan underline beneath the tagline
+    const taglineRule = this.add.graphics();
+    taglineRule.lineStyle(1, VI.COLORS.CYAN, 0.5);
+    taglineRule.lineBetween(cx - 110, titleY + 96, cx + 110, titleY + 96);
 
-    // ── Version stamp (tiny, corner) ──────────────────────────
-    this.add.text(width - 16, height - 16, 'v0.3.0 – QUACKDUNNIT', {
+    // Ambient gold sparkles around the title — small dots that twinkle
+    this._spawnTitleSparkles(cx, titleY);
+
+    // ── Primary action: PLAY (dominant, centered, breathing) ───
+    this._addPrimaryButton(cx, cy + 100, '▶  PLAY', () => this._startGame());
+
+    // ── Secondary action: HOW TO PLAY ──────────────────────────
+    this._addSecondaryButton(cx, cy + 180, 'HOW TO PLAY', () => this._showHelp());
+
+    // ── Game jam credit + version (bottom corners) ─────────────
+    this.add.text(16, height - 16, 'VEGAS INFINITE GAME JAM 2026', {
       fontFamily: VI.FONTS.MONO,
       fontSize: '11px',
-      color: '#ffffff33',
+      color: VI.HEX.CYAN,
+      letterSpacing: 3,
+    }).setOrigin(0, 1).setAlpha(0.5);
+
+    this.add.text(width - 16, height - 16, 'v0.5  ·  QUACKDUNNIT', {
+      fontFamily: VI.FONTS.MONO,
+      fontSize: '11px',
+      color: '#ffffff44',
     }).setOrigin(1, 1);
 
     // Keyboard shortcuts still active (no on-screen hint)
@@ -79,6 +118,127 @@ class MenuScene extends Phaser.Scene {
   }
 
   // ── Private helpers ─────────────────────────────────────────
+
+  // Ballroom PNG dimmed under a dark vignette. If the PNG isn't loaded
+  // (asset missing or first run before preload completes), falls back to
+  // the original vector treatment via _drawBackground / _drawNeonAccents.
+  _drawCinematicBackdrop() {
+    const { width, height } = this.scale;
+
+    // Flood-black floor first — always present so vignette has something
+    // to layer over.
+    const floor = this.add.graphics();
+    floor.fillStyle(VI.COLORS.FLOOD_BLACK, 1);
+    floor.fillRect(0, 0, width, height);
+
+    if (this.textures.exists('bg-ballroom')) {
+      const bg = this.add.image(width / 2, height / 2, 'bg-ballroom');
+      bg.setDisplaySize(width, height);
+      bg.setAlpha(0.42);   // dim — the title is the hero, the room is the stage
+    } else {
+      // Fallback: original radial gradient treatment so the menu still
+      // renders cleanly if the texture didn't load for any reason.
+      this._drawBackground();
+    }
+
+    // Dark vignette overlay — pulls the corners into shadow so the title
+    // and CTAs in the center pop against the brighter middle.
+    const vignette = this.add.graphics();
+    [
+      { t: 90, a: 0.55 },
+      { t: 60, a: 0.40 },
+      { t: 36, a: 0.24 },
+      { t: 16, a: 0.10 },
+    ].forEach(({ t, a }) => {
+      vignette.lineStyle(t, VI.COLORS.FLOOD_BLACK, a);
+      vignette.strokeRect(t / 2, t / 2, width - t, height - t);
+    });
+
+    // Gold accent corner brackets — anchors the brand and frames the scene
+    this._drawNeonAccents();
+  }
+
+  // Three suspect portraits drifting at the edges of the screen — chef
+  // (lower left), duchess (upper right), butler (lower right). Each is
+  // hex-masked just like the GameScene and Lobby renderings so they
+  // visually match the in-game cast.
+  _drawSuspectLineup() {
+    const { width, height } = this.scale;
+    const lineup = [
+      { id: 'chef',    x: 130,           y: height - 180, r: 64, drift: 8  },
+      { id: 'duchess', x: width - 130,   y: 200,          r: 60, drift: 7  },
+      { id: 'butler',  x: width - 150,   y: height - 200, r: 60, drift: 9  },
+    ];
+    lineup.forEach((s, i) => {
+      const key = `suspect-${s.id}`;
+      if (!this.textures.exists(key)) return;
+
+      const img = this.add.image(s.x, s.y, key);
+      img.setDisplaySize(s.r * 2.0, s.r * 2.0);
+      img.setAlpha(0.78);
+
+      // Hex mask so the rectangular black bg gets clipped to a hex shape.
+      const maskShape = this.make.graphics({}, false);
+      maskShape.fillStyle(0xffffff, 1);
+      const maskR = s.r * 0.94;
+      const maskPts = [];
+      for (let a = 0; a < 6; a++) {
+        const ang = (Math.PI / 3) * a - Math.PI / 6;
+        maskPts.push({ x: s.x + maskR * Math.cos(ang), y: s.y + maskR * Math.sin(ang) });
+      }
+      maskShape.fillPoints(maskPts, true);
+      img.setMask(maskShape.createGeometryMask());
+
+      // Hex frame outline drawn after the image so the frame reads on top.
+      const frame = this.add.graphics();
+      frame.lineStyle(2, VI.COLORS.GOLD, 0.85);
+      frame.strokePoints(maskPts, true);
+      frame.lineStyle(7, VI.COLORS.GOLD, 0.14);
+      frame.strokePoints(maskPts, true);
+
+      // Slow ambient drift — both image AND mask AND frame move so they
+      // stay aligned. Stagger phase per suspect so they don't bob in unison.
+      const phaseOffset = i * 0.8;
+      this.tweens.add({
+        targets: [img, maskShape, frame],
+        y: `-=${s.drift}`,
+        duration: 2200 + i * 300,
+        delay:    phaseOffset * 200,
+        ease: 'Sine.easeInOut',
+        yoyo: true,
+        repeat: -1,
+      });
+    });
+  }
+
+  // Small twinkling gold dots floating around the title — ambient sparkle.
+  _spawnTitleSparkles(cx, cy) {
+    const N = 12;
+    for (let i = 0; i < N; i++) {
+      const angle = (Math.PI * 2 * i) / N + Math.random() * 0.4;
+      const dist  = 280 + Math.random() * 220;
+      const px = cx + Math.cos(angle) * dist * 0.65;     // wider than tall
+      const py = cy + Math.sin(angle) * dist * 0.30;
+      const r  = 1.4 + Math.random() * 1.2;
+
+      const dot = this.add.graphics();
+      dot.fillStyle(VI.COLORS.GOLD, 1);
+      dot.fillCircle(px, py, r);
+      dot.fillStyle(VI.COLORS.GOLD, 0.35);
+      dot.fillCircle(px, py, r * 2.3);
+
+      // Each sparkle twinkles on its own offset cycle
+      this.tweens.add({
+        targets: dot,
+        alpha:    { from: 0.35, to: 1 },
+        duration: 800 + Math.random() * 1400,
+        delay:    Math.random() * 1200,
+        ease:     'Sine.easeInOut',
+        yoyo:     true,
+        repeat:   -1,
+      });
+    }
+  }
 
   _drawBackground() {
     const { width, height } = this.scale;
@@ -162,6 +322,12 @@ class MenuScene extends Phaser.Scene {
     // Gentle "ready to play" pulse on the border so the eye lands here first
     this.tweens.add({
       targets: btn, alpha: { from: 0.85, to: 1 },
+      duration: 900, yoyo: true, repeat: -1, ease: 'Sine.easeInOut',
+    });
+    // Subtle scale pulse on the text so the button feels alive even when
+    // the user isn't hovering — the arrow + label gently breathe in sync.
+    this.tweens.add({
+      targets: text, scale: { from: 1.0, to: 1.04 },
       duration: 900, yoyo: true, repeat: -1, ease: 'Sine.easeInOut',
     });
 

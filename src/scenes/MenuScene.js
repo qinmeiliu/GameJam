@@ -27,11 +27,6 @@ class MenuScene extends Phaser.Scene {
     // vector treatment if the PNG hasn't loaded.
     this._drawCinematicBackdrop();
 
-    // ── Suspect lineup peeking in from corners ────────────────
-    // Three of the cast lurk at the edges as if eavesdropping on the case.
-    // Each drifts gently with a staggered yoyo for ambient motion.
-    this._drawSuspectLineup();
-
     // ── Game Title — QUACKDUNNIT, single hero word ────────────
     const titleY = cy - 80;
 
@@ -76,11 +71,6 @@ class MenuScene extends Phaser.Scene {
       color: VI.HEX.CREAM,
       letterSpacing: 10,
     }).setOrigin(0.5).setAlpha(0.85);
-
-    // Faint cyan underline beneath the tagline
-    const taglineRule = this.add.graphics();
-    taglineRule.lineStyle(1, VI.COLORS.CYAN, 0.5);
-    taglineRule.lineBetween(cx - 110, titleY + 96, cx + 110, titleY + 96);
 
     // Ambient gold sparkles around the title — small dots that twinkle
     this._spawnTitleSparkles(cx, titleY);
@@ -153,9 +143,6 @@ class MenuScene extends Phaser.Scene {
       vignette.lineStyle(t, VI.COLORS.FLOOD_BLACK, a);
       vignette.strokeRect(t / 2, t / 2, width - t, height - t);
     });
-
-    // Gold accent corner brackets — anchors the brand and frames the scene
-    this._drawNeonAccents();
   }
 
   // Three suspect portraits drifting at the edges of the screen — chef
@@ -397,21 +384,22 @@ class MenuScene extends Phaser.Scene {
     }).setOrigin(0.5).setDepth(102);
 
     const body = [
-      '1.  CHOOSE YOUR TABLE.  3–6 suspects. More suspects → bigger payouts, lower win',
-      '     frequency, and slightly better RTP. Pick your volatility.',
+      '1.  PICK YOUR TABLE.  3–6 suspects. Bigger tables = bigger payouts and',
+      '     better RTP, but every duck is one extra wrong guess.',
       '',
-      '2.  PLACE YOUR BET.  Stack chips ($10 minimum), hit CONFIRM. Bet locks while',
-      '     the folder is fresh for the +15% EARLY BIRD bonus. Starting purse: $10,000.',
+      '2.  STACK YOUR CHIPS.  $10 minimum, $10,000 purse. Lock your bet while',
+      '     the case folder is fresh (>60% integrity) for a +15% EARLY BIRD bonus.',
       '',
-      '3.  THE CLUE MARKET.  Two clues offered during ACCUSE. First clue costs 10% of',
-      '     your bet; second costs 20%. Skip BOTH for the +20% NO-CLUE BONUS. Clues',
-      '     can mislead — sometimes they hint at the killer, sometimes at someone else.',
+      '3.  THE CLUE MARKET.  Two clues for sale during ACCUSE — first costs 10%',
+      '     of your bet, second costs 20%. Trait clues narrow the field to TWO',
+      '     suspects, never one. Skip BOTH clues for a ×1.20 NO-CLUE BONUS.',
       '',
-      '4.  ACCUSE.  Wrong on Acc #1 → SECOND CHANCE: 15s, folder burns 3× faster,',
-      '     no new clue purchases, payout capped at 30%. Wrong twice = COLD CASE.',
+      '4.  ACCUSE.  Wrong on Accusation #1 → SECOND CHANCE: 15 seconds, folder',
+      '     burns 3× faster, clue market locks, payout caps at 30% if you nail',
+      '     it. Wrong twice = COLD CASE. Cash walks.',
       '',
-      '5.  THE TWIST.  The killer is pure RNG. Clues are theatre. You are a gambler',
-      '     dressed as a detective. The smartest play is to skip the clues entirely.',
+      '5.  THE TWIST.  The killer is rolled by pure RNG. Clues are theatre.',
+      '     You are a gambler dressed as a detective. Bet accordingly.',
     ].join('\n');
 
     const text = this.add.text(cx, cy + 4, body, {

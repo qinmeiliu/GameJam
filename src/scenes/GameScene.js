@@ -1345,6 +1345,20 @@ class GameScene extends Phaser.Scene {
 
     // Stash panel center + dimensions for the rare-tier sparkle hype
     this._cfPanelBounds = { cx, cy, pw, ph };
+
+    // EVIDENCE stamp — slams onto the case file ONLY on rare-weapon rounds.
+    // Hidden by default; _showCaseFile triggers the slam via _slamEvidenceStamp.
+    if (this.textures.exists('stamp-evidence')) {
+      const sx = cx + pw / 2 - 130;
+      const sy = cy + ph / 2 - 96;
+      this._cfStamp = this.add.image(sx, sy, 'stamp-evidence');
+      this._cfStamp.setDisplaySize(220, 147);     // source is 3:2 — keep aspect
+      this._cfStamp.setRotation(-0.18);            // slight wonky-stamp tilt
+      this._cfStamp.setAlpha(0);
+      // Stash the resting scale so the slam tween can return to the right size
+      this._cfStampBaseScaleX = this._cfStamp.scaleX;
+      this._cfStampBaseScaleY = this._cfStamp.scaleY;
+    }
   }
 
   _showCaseFile() {
@@ -1373,12 +1387,15 @@ class GameScene extends Phaser.Scene {
         this._cfWeaponTier.setText('★  RARE WEAPON  ★').setColor(VI.HEX.GOLD)
           .setShadow(0, 0, VI.HEX.GOLD, 8, true);
         this._spawnCaseFileSparkles();
+        this._slamEvidenceStamp();
       } else if (r.weaponTier === 'uncommon') {
         this._cfWeaponTier.setText('UNCOMMON WEAPON').setColor(VI.HEX.VI_AMBER)
           .setShadow(0, 0, '#000', 0, false);
+        this._hideEvidenceStamp();
       } else {
         this._cfWeaponTier.setText('COMMON WEAPON').setColor('#888')
           .setShadow(0, 0, '#000', 0, false);
+        this._hideEvidenceStamp();
       }
     }
 
@@ -1420,6 +1437,38 @@ class GameScene extends Phaser.Scene {
       });
     });
     this._clearCaseFileSparkles();
+    this._hideEvidenceStamp();
+  }
+
+  // Slam the EVIDENCE stamp onto the case file. Used on rare-weapon rounds:
+  // scales in from 2.4× to base with Back.Out, alpha 0→1, after a delay so
+  // it lands AFTER the case file content has settled (peak drama).
+  _slamEvidenceStamp() {
+    if (!this._cfStamp) return;
+    const bx = this._cfStampBaseScaleX;
+    const by = this._cfStampBaseScaleY;
+    this.tweens.killTweensOf(this._cfStamp);
+    this._cfStamp.setAlpha(0);
+    this._cfStamp.setScale(bx * 2.4, by * 2.4);
+    this.tweens.add({
+      targets: this._cfStamp,
+      scaleX: bx, scaleY: by,
+      alpha: 1,
+      duration: 320,
+      delay: 760,                  // wait for the case file content to land first
+      ease: 'Back.Out',
+    });
+  }
+
+  _hideEvidenceStamp() {
+    if (!this._cfStamp) return;
+    this.tweens.killTweensOf(this._cfStamp);
+    this.tweens.add({
+      targets: this._cfStamp,
+      alpha: 0,
+      duration: 200,
+      ease: 'Cubic.easeIn',
+    });
   }
 
   // Rare-weapon hype: 16 gold sparkles scattered around the case file panel,

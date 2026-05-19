@@ -59,6 +59,11 @@ class PreloadScene extends Phaser.Scene {
     // this.load.image('victim-quackton',   'assets/images/victims/quackton.png');
     // ...etc.
 
+    // ── UI overlay graphics ────────────────────────────────────
+    // Reusable transparent-bg PNGs that get stamped onto panels for
+    // moments of impact. EVIDENCE is currently used for rare-weapon hype.
+    this.load.image('stamp-evidence', 'assets/images/ui/stamp-evidence.png');
+
     // ── Room backgrounds (12 neon-line-art rooms) ──────────────
     // Texture key is `bg-<roomId>` where roomId matches MURDER_DATA.rooms[].id.
     // Filenames differ from the keys for several rooms (the artist used longer

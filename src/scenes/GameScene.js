@@ -1259,14 +1259,15 @@ class GameScene extends Phaser.Scene {
     });
 
     // ── Ducky the Detective — host portrait in the top-right area ──
-    // Lives OUTSIDE the case file panel in the empty top-right space
-    // (the area above where the clue market will appear during ACCUSE).
-    // Larger so he reads as the player's host, not a tiny accent.
+    // Lives in the CLUE MARKET slot (x=819-1264, y=100-360) which is empty
+    // during BETTING — the clue market only drops in during ACCUSE, by
+    // which time _hideCaseFile has already faded Ducky out. Game log starts
+    // at y=370 so we anchor Ducky above it.
     if (this.textures.exists('ducky-investigating')) {
       const W = this.scale.width;
-      const dR = 110;                          // bigger now that he's the focal corner
-      const dx = W - dR - 28;                  // 28px from right edge
-      const dy = cy + 8;                       // roughly vertically aligned with panel center
+      const dR = 105;
+      const dx = Math.round(W * 0.82);          // center of right panel column (~1050)
+      const dy = 198;                            // upper portion of clue market area; caption at ~321 stays inside
 
       this._cfDucky = this.add.image(dx, dy, 'ducky-investigating');
       this._cfDucky.setDisplaySize(dR * 2.05, dR * 2.05);
@@ -1814,7 +1815,7 @@ class GameScene extends Phaser.Scene {
     this._showDuckyPointing(() => this._setPhase(targetPhase));
   }
 
-  // Dramatic full-screen Ducky pointing pose with a tiny "J'ACCUSE!" tag.
+  // Dramatic Ducky pointing pose with a GOTCHA! stamp slam.
   // Falls back to an immediate phase transition if the texture isn't loaded.
   _showDuckyPointing(onComplete) {
     if (!this.textures.exists('ducky-pointing')) {
@@ -1832,24 +1833,50 @@ class GameScene extends Phaser.Scene {
     this.tweens.add({ targets: dim, alpha: { from: 0, to: 0.45 }, duration: 160, ease: 'Cubic.easeOut' });
 
     // Ducky slides in from the LEFT, lands at center-left, points to the right
-    // (toward the suspect grid where the accused duck sits).
-    const targetX = W * 0.32;
-    const targetY = H * 0.52;
+    // (toward the GOTCHA! text and the suspect grid).
+    const targetX = Math.round(W * 0.32);
+    const targetY = Math.round(H * 0.52);
     const dR      = 220;
+
     const ducky = this.add.image(-dR, targetY, 'ducky-pointing');
-    ducky.setDisplaySize(dR * 2.0, dR * 2.0);
+    ducky.setDisplaySize(dR * 1.95, dR * 1.95);
     ducky.setDepth(1501);
 
+    // Circle mask + gold ring frame so the PNG's black square bg doesn't
+    // read as a rectangle behind Ducky. Mask must follow the slide-in tween
+    // so it tracks the duck horizontally as he enters.
+    const mask = this.make.graphics({}, false);
+    mask.fillStyle(0xffffff, 1);
+    mask.fillCircle(targetX, targetY, dR * 0.96);
+    mask.x = -dR - targetX;  // initial offset matches Ducky's offscreen start
+    ducky.setMask(mask.createGeometryMask());
+
+    const frame = this.add.graphics();
+    frame.lineStyle(14, VI.COLORS.GOLD, 0.20);
+    frame.strokeCircle(targetX, targetY, dR);
+    frame.lineStyle(3, VI.COLORS.GOLD, 0.95);
+    frame.strokeCircle(targetX, targetY, dR);
+    frame.x = -dR - targetX;   // matches Ducky entrance offset
+    frame.setDepth(1501);
+
+    // Slide-in: Ducky + mask + frame all move together so the framed portrait
+    // arrives as a single composite (no mask drift mid-flight).
     this.tweens.add({
-      targets: ducky,
+      targets: [ducky],
       x: targetX,
       duration: 320,
       ease: 'Back.Out',
     });
+    this.tweens.add({
+      targets: [mask, frame],
+      x: 0,
+      duration: 320,
+      ease: 'Back.Out',
+    });
 
-    // "J'ACCUSE!" stamp text — slams in 200ms after Ducky lands
-    const accuseText = this.add.text(W * 0.62, H * 0.46, "J'ACCUSE!", {
-      fontFamily: VI.FONTS.HEADING, fontSize: '88px',
+    // GOTCHA! stamp — slams in 220ms after Ducky lands
+    const accuseText = this.add.text(W * 0.62, H * 0.46, 'GOTCHA!', {
+      fontFamily: VI.FONTS.HEADING, fontSize: '96px',
       color: VI.HEX.GOLD, stroke: '#000', strokeThickness: 10,
       shadow: { blur: 24, color: VI.HEX.MAGENTA, fill: true },
       letterSpacing: 4,
@@ -1867,12 +1894,14 @@ class GameScene extends Phaser.Scene {
     // Hold for ~700ms after entrance, then fade everything out and fire callback
     this.time.delayedCall(900, () => {
       this.tweens.add({
-        targets: [dim, ducky, accuseText],
+        targets: [dim, ducky, frame, accuseText],
         alpha: 0,
         duration: 220, ease: 'Cubic.easeIn',
         onComplete: () => {
           dim.destroy();
           ducky.destroy();
+          mask.destroy();
+          frame.destroy();
           accuseText.destroy();
           if (onComplete) onComplete();
         },
@@ -2024,8 +2053,12 @@ class GameScene extends Phaser.Scene {
       }
       if (this.gs.wrongCount === 1) parts.push('Acc#2 ×0.30');
 
-      multSubText = this.add.text(cx, cy - 6, parts.join('  ·  '), {
-        fontFamily: VI.FONTS.MONO, fontSize: '11px', color: VI.HEX.CREAM,
+      // Smaller font + tighter separator + wordWrap so long breakdowns
+      // (all bonuses active + Acc#2 modifier) fold to a second line cleanly
+      // inside the panel instead of leaking past the edges.
+      multSubText = this.add.text(cx, cy - 6, parts.join(' · '), {
+        fontFamily: VI.FONTS.MONO, fontSize: '10px', color: VI.HEX.CREAM,
+        align: 'center', wordWrap: { width: pw - 60 }, lineSpacing: 3,
       }).setOrigin(0.5).setAlpha(0);
     }
 

@@ -1215,13 +1215,20 @@ class GameScene extends Phaser.Scene {
     g.lineStyle(2, VI.COLORS.GOLD, 0.9);
     g.strokeRoundedRect(cx - pw/2, cy - ph/2, pw, ph, 14);
 
-    // ── Paper-grain horizontal lines down the LEFT margin ─────
-    // Faint gold tick marks evoke ruled notepaper inside the folder.
-    g.lineStyle(1, VI.COLORS.GOLD, 0.15);
-    const margin = 20;
-    for (let i = 1; i <= 6; i++) {
-      const ty = cy - ph/2 + 60 + i * 44;
-      g.lineBetween(cx - pw/2 + margin, ty, cx - pw/2 + margin + 10, ty);
+    // EVIDENCE stamp — created EARLY in the build sequence so it renders
+    // BENEATH every subsequent text element. The text reads on top, the
+    // stamp acts as background decoration (like a real rubber stamp pressed
+    // on a document). Slammed in / faded out via _slamEvidenceStamp /
+    // _hideEvidenceStamp; only visible on rare-weapon rounds.
+    if (this.textures.exists('stamp-evidence')) {
+      const sx = cx + pw / 2 - 130;
+      const sy = cy + ph / 2 - 96;
+      this._cfStamp = this.add.image(sx, sy, 'stamp-evidence');
+      this._cfStamp.setDisplaySize(220, 147);
+      this._cfStamp.setRotation(-0.18);
+      this._cfStamp.setAlpha(0);
+      this._cfStampBaseScaleX = this._cfStamp.scaleX;
+      this._cfStampBaseScaleY = this._cfStamp.scaleY;
     }
 
     // Tab label: small TAB tag stamped on the folder tab
@@ -1345,20 +1352,6 @@ class GameScene extends Phaser.Scene {
 
     // Stash panel center + dimensions for the rare-tier sparkle hype
     this._cfPanelBounds = { cx, cy, pw, ph };
-
-    // EVIDENCE stamp — slams onto the case file ONLY on rare-weapon rounds.
-    // Hidden by default; _showCaseFile triggers the slam via _slamEvidenceStamp.
-    if (this.textures.exists('stamp-evidence')) {
-      const sx = cx + pw / 2 - 130;
-      const sy = cy + ph / 2 - 96;
-      this._cfStamp = this.add.image(sx, sy, 'stamp-evidence');
-      this._cfStamp.setDisplaySize(220, 147);     // source is 3:2 — keep aspect
-      this._cfStamp.setRotation(-0.18);            // slight wonky-stamp tilt
-      this._cfStamp.setAlpha(0);
-      // Stash the resting scale so the slam tween can return to the right size
-      this._cfStampBaseScaleX = this._cfStamp.scaleX;
-      this._cfStampBaseScaleY = this._cfStamp.scaleY;
-    }
   }
 
   _showCaseFile() {
@@ -1441,8 +1434,9 @@ class GameScene extends Phaser.Scene {
   }
 
   // Slam the EVIDENCE stamp onto the case file. Used on rare-weapon rounds:
-  // scales in from 2.4× to base with Back.Out, alpha 0→1, after a delay so
-  // it lands AFTER the case file content has settled (peak drama).
+  // scales in from 2.4× to base with Back.Out, alpha rises to a translucent
+  // 0.55 so the text reads on top (stamp now sits BEHIND the text in the
+  // display list — see _buildCaseFilePanel order).
   _slamEvidenceStamp() {
     if (!this._cfStamp) return;
     const bx = this._cfStampBaseScaleX;
@@ -1453,7 +1447,7 @@ class GameScene extends Phaser.Scene {
     this.tweens.add({
       targets: this._cfStamp,
       scaleX: bx, scaleY: by,
-      alpha: 1,
+      alpha: 0.55,                 // translucent — text on top stays primary
       duration: 320,
       delay: 760,                  // wait for the case file content to land first
       ease: 'Back.Out',

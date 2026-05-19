@@ -1764,7 +1764,7 @@ class GameScene extends Phaser.Scene {
     this._balanceText.setText(`$${gs.balance.toLocaleString()}`);
     this.events.emit('game:balance_update', gs.balance);
 
-    const tag = secondAccusation ? ' (Acc#2 — 40% cap)' : '';
+    const tag = secondAccusation ? ' (Acc#2 — 30% cap)' : '';
     this._addClue(`✅ CORRECT! ${gs.round.suspects[gs.selectedIdx].name} is the killer!${tag}`, VI.HEX.GOLD);
     this._addClue(`💰 PAYOUT: +$${Math.round(net).toLocaleString()}`, VI.HEX.GOLD);
     this._markGuiltySuspect(gs.selectedIdx);
@@ -1813,42 +1813,78 @@ class GameScene extends Phaser.Scene {
     const cx = width / 2, cy = height / 2;
     const pw = 560, ph = 360;
 
+    // Backdrop dim — instant; the panel is what gets the dramatic entrance
     const overlay = this.add.graphics();
     overlay.fillStyle(0x000000, 0.72);
     overlay.fillRect(0, 0, width, height);
 
+    // Panel as a Container so we can scale-in around its center cleanly
+    const panelContainer = this.add.container(cx, cy);
     const panel = this.add.graphics();
     panel.fillStyle(VI.COLORS.PANEL_SURFACE, 0.97);
-    panel.fillRoundedRect(cx - pw/2, cy - ph/2, pw, ph, 16);
+    panel.fillRoundedRect(-pw/2, -ph/2, pw, ph, 16);
     panel.lineStyle(3, win ? VI.COLORS.GOLD : VI.COLORS.VI_RED, 1);
-    panel.strokeRoundedRect(cx - pw/2, cy - ph/2, pw, ph, 16);
+    panel.strokeRoundedRect(-pw/2, -ph/2, pw, ph, 16);
+    panelContainer.add(panel);
+    panelContainer.setScale(0.5);
+    panelContainer.setAlpha(0);
+    // Bouncy entrance — slams in like a casino dealer setting the result card
+    this.tweens.add({
+      targets: panelContainer,
+      scale: 1, alpha: 1,
+      duration: 360,
+      ease: 'Back.Out',
+    });
 
-    const headline = this.add.text(cx, cy - 130, win ? '🔍  CASE SOLVED!' : '❌  CASE COLD', {
-      fontFamily: VI.FONTS.HEADING, fontSize: '36px',
-      color: win ? VI.HEX.GOLD : VI.HEX.VI_RED, stroke: '#000', strokeThickness: 5,
-      shadow: { blur: 18, color: win ? VI.HEX.GOLD : VI.HEX.VI_RED, fill: true },
-    }).setOrigin(0.5);
+    // Headline / COLD CASE stamp differ by outcome. Both live as world-coord
+    // elements (not children of panelContainer) so their fade-in stagger
+    // doesn't fight the container's entrance.
+    let headline;
+    if (win) {
+      headline = this.add.text(cx, cy - 130, '🔍  CASE SOLVED!', {
+        fontFamily: VI.FONTS.HEADING, fontSize: '36px',
+        color: VI.HEX.GOLD, stroke: '#000', strokeThickness: 5,
+        shadow: { blur: 18, color: VI.HEX.GOLD, fill: true },
+      }).setOrigin(0.5).setAlpha(0);
+      this.tweens.add({ targets: headline, alpha: 1, duration: 320, delay: 280, ease: 'Cubic.easeOut' });
+    } else {
+      // COLD CASE stamp — slammed in big, tilted, then settles to size 1
+      headline = this.add.text(cx, cy - 110, 'COLD CASE', {
+        fontFamily: VI.FONTS.HEADING, fontSize: '62px',
+        color: VI.HEX.VI_RED, stroke: '#000', strokeThickness: 8,
+        shadow: { blur: 18, color: VI.HEX.VI_RED, fill: true },
+        letterSpacing: 8,
+      }).setOrigin(0.5);
+      headline.setRotation(-0.18);
+      headline.setScale(2.4);
+      headline.setAlpha(0);
+      this.tweens.add({
+        targets: headline,
+        scale: 1, alpha: 1,
+        duration: 360, delay: 320, ease: 'Back.Out',
+      });
+    }
 
     const killerName = this.gs.round.suspects[this.gs.round.killerIdx].name;
     const verdictLine = win
       ? `${killerName} has been arrested!`
       : `The killer was ${killerName}. They escape free.`;
-    const verdictText = this.add.text(cx, cy - 84, verdictLine, {
+    const verdictText = this.add.text(cx, cy - 60, verdictLine, {
       fontFamily: VI.FONTS.BODY, fontSize: '15px', color: VI.HEX.CREAM,
-    }).setOrigin(0.5);
+    }).setOrigin(0.5).setAlpha(0);
 
-    // ── Multiplier breakdown (win only, v0.5) ─────────────────
+    // Multiplier breakdown (win only)
     let multText = null, multSubText = null;
     if (win && this.gs.bet > 0) {
-      const gross = delta + this.gs.bet;             // delta is net profit; gross = profit + stake
+      const gross = delta + this.gs.bet;
       const mult  = gross / this.gs.bet;
       const bd    = this.gs.round.getPayoutBreakdown
         ? this.gs.round.getPayoutBreakdown(this.gs.selectedIdx, this._folderPct)
         : null;
 
-      multText = this.add.text(cx, cy - 48, `MULTIPLIER  ×${mult.toFixed(2)}`, {
+      multText = this.add.text(cx, cy - 28, `MULTIPLIER  ×${mult.toFixed(2)}`, {
         fontFamily: VI.FONTS.HEADING, fontSize: '18px', color: VI.HEX.CYAN, letterSpacing: 5,
-      }).setOrigin(0.5);
+      }).setOrigin(0.5).setAlpha(0);
 
       const parts = [];
       if (bd) {
@@ -1860,21 +1896,53 @@ class GameScene extends Phaser.Scene {
       }
       if (this.gs.wrongCount === 1) parts.push('Acc#2 ×0.30');
 
-      multSubText = this.add.text(cx, cy - 24, parts.join('  ·  '), {
-        fontFamily: VI.FONTS.MONO, fontSize: '11px', color: VI.HEX.CREAM, alpha: 0.75,
-      }).setOrigin(0.5);
+      multSubText = this.add.text(cx, cy - 6, parts.join('  ·  '), {
+        fontFamily: VI.FONTS.MONO, fontSize: '11px', color: VI.HEX.CREAM,
+      }).setOrigin(0.5).setAlpha(0);
     }
 
-    // Net delta — big and centered
+    // Net delta — big and centered, starts at $0 and ticks up
     const amtColor = delta >= 0 ? VI.HEX.GOLD : VI.HEX.MAGENTA;
-    const deltaText = this.add.text(cx, cy + 20, `${delta >= 0 ? '+' : ''}$${Math.round(delta).toLocaleString()}`, {
-      fontFamily: VI.FONTS.MONO, fontSize: '44px', color: amtColor,
-      shadow: { blur: 12, color: amtColor, fill: true },
-    }).setOrigin(0.5);
+    const deltaText = this.add.text(cx, cy + 38, '$0', {
+      fontFamily: VI.FONTS.MONO, fontSize: '48px', color: amtColor,
+      shadow: { blur: 14, color: amtColor, fill: true },
+    }).setOrigin(0.5).setAlpha(0);
+    // Count-up tween — classic casino reveal. Tween a counter object then
+    // refresh text in onUpdate so commas / sign / formatting stay correct.
+    const counter = { v: 0 };
+    const finalAmount = Math.round(delta);
+    this.tweens.add({
+      targets: counter,
+      v: finalAmount,
+      duration: 900,
+      delay:    420,
+      ease: 'Cubic.easeOut',
+      onUpdate: () => {
+        const v = Math.round(counter.v);
+        const sign = v > 0 ? '+' : v < 0 ? '-' : '';
+        deltaText.setText(`${sign}$${Math.abs(v).toLocaleString()}`);
+      },
+    });
+    this.tweens.add({ targets: deltaText, alpha: 1, duration: 240, delay: 380, ease: 'Cubic.easeOut' });
 
-    const balanceText = this.add.text(cx, cy + 68, `Balance: $${this.gs.balance.toLocaleString()}`, {
+    const balanceText = this.add.text(cx, cy + 86, `Balance: $${this.gs.balance.toLocaleString()}`, {
       fontFamily: VI.FONTS.MONO, fontSize: '16px', color: VI.HEX.CREAM,
-    }).setOrigin(0.5);
+    }).setOrigin(0.5).setAlpha(0);
+
+    // Sequential reveal — each line fades in 80ms after the previous one
+    const fadeIns = [
+      { target: verdictText, delay: 360 },
+      { target: multText,    delay: 440 },
+      { target: multSubText, delay: 520 },
+      { target: balanceText, delay: 1320 },   // after the count-up finishes
+    ];
+    fadeIns.forEach(({ target, delay }) => {
+      if (!target) return;
+      this.tweens.add({ targets: target, alpha: target === multSubText ? 0.75 : 1, duration: 320, delay, ease: 'Cubic.easeOut' });
+    });
+
+    // Confetti on win — gold/cyan/magenta/orange pieces cascade from top of panel
+    const confettiPieces = win ? this._spawnConfetti(cx, cy - ph/2 + 10, pw - 60) : [];
 
     // Next case button
     const bw = 230, bh = 50;
@@ -1890,28 +1958,65 @@ class GameScene extends Phaser.Scene {
     const btnLbl = this.add.text(cx, cy + ph/2 - 35, 'NEXT CASE  →', {
       fontFamily: VI.FONTS.HEADING, fontSize: '18px', color: '#fff',
     }).setOrigin(0.5);
+    btnG.setAlpha(0); btnLbl.setAlpha(0);
+    this.tweens.add({ targets: [btnG, btnLbl], alpha: 1, duration: 300, delay: 1500, ease: 'Cubic.easeOut' });
 
     const zone = this.add.zone(cx, cy + ph/2 - 35, bw, bh).setInteractive({ cursor: 'pointer' });
     zone.on('pointerover',  () => { _drawBtn(true);  btnLbl.setColor(VI.HEX.GOLD); });
     zone.on('pointerout',   () => { _drawBtn(false); btnLbl.setColor('#fff'); });
     zone.on('pointerup', () => {
       this.events.emit('game:next_round', this.gs.balance);
-      this._startRound();          // cleans up everything via _roundOverlayObjs
+      this._startRound();
     });
 
     // Track everything for cleanup at _startRound — array + container
     if (!this._roundOverlayObjs) this._roundOverlayObjs = [];
-    const all = [overlay, panel, headline, verdictText, deltaText, balanceText, btnG, btnLbl, zone];
+    const all = [overlay, panelContainer, headline, verdictText, deltaText, balanceText, btnG, btnLbl, zone];
     if (multText)    all.push(multText);
     if (multSubText) all.push(multSubText);
+    confettiPieces.forEach(p => all.push(p));
     all.forEach(o => this._roundOverlayObjs.push(o));
     if (this._roundContainer) {
       this._roundContainer.add(all);
     }
 
-    // Cameras
+    // Camera response — keep the celebratory gold flash for wins, lighter
+    // shake for losses (the COLD CASE stamp already sells the loss).
     if (win) { this.cameras.main.flash(400, 253, 224, 84, false); }
-    else      { this.cameras.main.shake(300, 0.012); }
+    else     { this.cameras.main.shake(280, 0.010); }
+  }
+
+  // Casino-style confetti burst — 36 colored rectangles spray downward and
+  // outward from a point, rotating + fading over ~2s. Returns the array of
+  // pieces so the caller can push them into _roundOverlayObjs for cleanup.
+  _spawnConfetti(x, y, spreadW) {
+    const colors = [VI.COLORS.GOLD, VI.COLORS.CYAN, VI.COLORS.MAGENTA, VI.COLORS.VI_ORANGE];
+    const pieces = [];
+    for (let i = 0; i < 36; i++) {
+      const startX = x + (Math.random() - 0.5) * spreadW;
+      const startY = y;
+      const color  = colors[Math.floor(Math.random() * colors.length)];
+      const piece  = this.add.graphics();
+      piece.fillStyle(color, 1);
+      piece.fillRect(-4, -2, 8, 4);
+      piece.x = startX;
+      piece.y = startY;
+      piece.rotation = Math.random() * Math.PI * 2;
+      pieces.push(piece);
+
+      this.tweens.add({
+        targets: piece,
+        y: startY + 320 + Math.random() * 180,
+        x: startX + (Math.random() - 0.5) * 220,
+        rotation: piece.rotation + (Math.random() - 0.5) * 10,
+        alpha: { from: 1, to: 0 },
+        duration: 1500 + Math.random() * 800,
+        delay: 280 + Math.random() * 500,    // sync with panel entrance
+        ease: 'Cubic.easeIn',
+        onComplete: () => piece.destroy(),
+      });
+    }
+    return pieces;
   }
 
   // ── Action cards (GDD v0.4 canonical 8) ────────────────────

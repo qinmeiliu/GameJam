@@ -344,13 +344,13 @@ class RoundController {
   }
 
   _folderMultiplier(pct) {
-    // v0.6: lerp 0.4× (at 20% integrity floor) → 1.5× (at 100%).
-    // Floor was 0.2× in v0.5 which made slow-folder Acc#2 wins feel like
-    // punishment. 0.4× softens the worst case while keeping folder pressure
-    // meaningful — at 50% integrity you still get ~0.81× and the gap from
-    // bet-confirmation speed remains a real choice.
+    // v0.6.1: lerp 0.55× (at 20% integrity floor) → 1.5× (at 100%).
+    // Raised floor from 0.4 so a player who wins on Acc#2 (where folder is
+    // at the 20% floor) gets a positive return at all suspect counts — the
+    // v0.6 version still produced net losses on N=3 Acc#2 wins, which is
+    // confusing for a "winning" outcome.
     const clamped = Math.max(0.2, Math.min(1.0, pct));
-    return 0.4 + ((clamped - 0.2) / 0.8) * 1.1;   // 0.4 + 1.1 = 1.5 at full
+    return 0.55 + ((clamped - 0.2) / 0.8) * 0.95;   // 0.55 + 0.95 = 1.5 at full
   }
 
   // ── Action cards (GDD v0.4 canonical 8) ───────────────────

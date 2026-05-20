@@ -435,7 +435,7 @@ class MenuScene extends Phaser.Scene {
       '',
       '3.  THE CLUE MARKET.  Two clues for sale during ACCUSE — first costs 10%',
       '     of your bet, second costs 20%. Trait clues narrow the field to TWO',
-      '     suspects, never one. Skip BOTH clues for a ×1.25 NO-CLUE BONUS.',
+      '     suspects, never one. Skip BOTH clues for a ×1.10 NO-CLUE BONUS.',
       '',
       '4.  ACCUSE.  Wrong on Accusation #1 → SECOND CHANCE: 15 seconds, folder',
       '     burns 3× faster, clue market locks, payout caps at 55% if you nail',

@@ -106,7 +106,10 @@ const VI = {
     // refund). At 0.55, typical Acc#2 wins land at breakeven-to-positive.
     ACC2_PENALTY:           0.55,
     // No-clue bonus multiplier applied to gross iff cluesPurchased === 0.
-    NO_CLUE_BONUS_MULT:     1.25,
+    // v0.6.1: dropped 1.25 → 1.10 — the bigger multiplier stacked with Early
+    // Bird + full folder to push 0-clue RTP into the 150%+ range. 1.10 keeps
+    // the "skip-clues for free upside" incentive without breaking math.
+    NO_CLUE_BONUS_MULT:     1.10,
     // DEAD-EYE side bet — opt-in pre-round wager equal to 10% of main bet
     // (small skin in the game). Pays out only on a correct Acc#1; lost on
     // Acc#2 win OR loss. Payout formula: wager × (suspectCount - shift).

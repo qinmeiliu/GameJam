@@ -110,7 +110,7 @@ class MenuScene extends Phaser.Scene {
       letterSpacing: 3,
     }).setOrigin(0, 1).setAlpha(0.5);
 
-    this.add.text(width - 16, height - 16, 'v0.5  ·  QUACKDUNNIT', {
+    this.add.text(width - 16, height - 16, 'v0.6  ·  QUACKDUNNIT', {
       fontFamily: VI.FONTS.MONO,
       fontSize: '11px',
       color: '#ffffff44',

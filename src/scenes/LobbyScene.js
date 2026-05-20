@@ -530,8 +530,11 @@ class LobbyScene extends Phaser.Scene {
     const n = this._suspectCount();
     // v0.5: non-linear suspect mults from VI.GAME.SUSPECT_MULTS
     const base = VI.GAME.SUSPECT_MULTS[n] || (n * 0.8);
-    // Best-case max ≈ base × folder 1.5 × weapon 3.0 × early 1.15 × no-clue 1.25
-    const max  = base * 1.5 * 3.0 * 1.15 * 1.25;
+    // Best-case max ≈ base × folder 1.5 × weapon 3.0 × early 1.15 × no-clue.
+    // Pull NO_CLUE from the constant so the preview matches the live math
+    // even if it gets re-tuned (drifted from 1.25 → 1.10 in v0.6.1).
+    const noClue = VI.GAME.NO_CLUE_BONUS_MULT || 1.10;
+    const max  = base * 1.5 * 3.0 * 1.15 * noClue;
     this._plateRefs.guests.setText(`${n} GUESTS`);
     this._plateRefs.base.setText(`BASE  ${base.toFixed(1)}×`);
     this._plateRefs.odds.setText(`ODDS  1 IN ${n}`);

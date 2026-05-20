@@ -339,7 +339,7 @@ class RoundController {
     const foldMult  = this._folderMultiplier(1.0);                                    // 1.5× at full integrity
     const weapMult  = MURDER_DATA.weaponMultipliers[this.weaponTier] || 1.0;
     const earlyBird = 1 + (VI.GAME.EARLY_BIRD_BONUS != null ? VI.GAME.EARLY_BIRD_BONUS : 0.15);
-    const noClue    = VI.GAME.NO_CLUE_BONUS_MULT || 1.25;
+    const noClue    = VI.GAME.NO_CLUE_BONUS_MULT || 1.10;
     return Math.round(bet * suspMult * foldMult * weapMult * earlyBird * noClue);
   }
 

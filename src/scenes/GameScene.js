@@ -895,10 +895,10 @@ class GameScene extends Phaser.Scene {
           highlightG.lineStyle(2, VI.COLORS.GOLD, 0.5);
           highlightG.strokeCircle(cx, cy, tokenR + 8);
         }
-        // Hover SFX intentionally disabled — the current ElevenLabs file is
-        // too harsh for repeated UI hovers. Re-enable once a gentler file
-        // lands at assets/audio/sfx-hover.mp3.
-        // this._playSfx('sfx-hover', 0.25);
+        // Gentler hover blip. Low volume (0.20) so rapid hovering across
+        // multiple suspects doesn't fatigue. If the file still feels too
+        // sharp after this, drop volume further OR swap the audio asset.
+        this._playSfx('sfx-hover', 0.20);
         showBubble();
       });
       zone.on('pointerout', () => {

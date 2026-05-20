@@ -227,7 +227,8 @@ class UIScene extends Phaser.Scene {
       if (gs.gs.phase !== VI.PHASES.BETTING) return;
       this._accumulatedBet += value;
       this._refreshBetDisplay(this._accumulatedBet);
-      // Cosmetic — chip flies in an arc to the bet pile and lands.
+      // Audio + cosmetic — chip plop on click, flying arc to the pile.
+      this._playSfx('sfx-chip-plop', 0.45);
       this._spawnFlyingChip(x, y, value);
     });
 
@@ -455,6 +456,7 @@ class UIScene extends Phaser.Scene {
         ? `Bet $${this._currentBet} + DEAD-EYE $${deWager}`
         : `Bet confirmed: $${this._currentBet}`;
       this._showToast(toastMsg, VI.HEX.VI_AMBER, 900);
+      this._playSfx('sfx-bet-confirm', 0.70);
       // Chips have been "pushed to the table" — fade the pile.
       this._fadeBetStack();
     });
@@ -786,6 +788,13 @@ class UIScene extends Phaser.Scene {
     this._currentBet     = 0;
     if (this._betText) this._betText.setText('$0');
     this._fadeBetStack();
+  }
+
+  // SFX helper — fire-and-forget short sound, respects global mute.
+  // Mirrors the helper in GameScene; shared sound manager handles the rest.
+  _playSfx(key, volume) {
+    if (!this.cache.audio.exists(key)) return;
+    this.sound.play(key, { volume: volume != null ? volume : 0.6 });
   }
 
   // ── Toast notifications ─────────────────────────────────────

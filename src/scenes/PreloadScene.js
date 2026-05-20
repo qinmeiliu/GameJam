@@ -67,11 +67,23 @@ class PreloadScene extends Phaser.Scene {
     // Hero logo — replaces the stacked-text QUACKDUNNIT title on MenuScene.
     this.load.image('logo-quackdunnit', 'assets/images/ui/logo-quackdunnit.png');
 
-    // ── Audio: music tracks (loops) + future SFX ──────────────
-    // Music: ambient loops per scene. Both tracks are ~4MB AAC/MP3 generated
-    // via Suno. Loops cleanly. SFX (chip clicks, stingers etc) come later.
-    this.load.audio('music-menu',    'assets/audio/music-menu.mp3');
-    this.load.audio('music-betting', 'assets/audio/music-betting.mp3');
+    // ── Audio: music tracks (loops) + SFX ──────────────────────
+    // Music: ambient loops per scene (Suno-generated, ~4MB each).
+    // SFX: short stingers and UI sounds (ElevenLabs-generated, <100KB each).
+    // All scenes check this.cache.audio.exists before playing so a missing
+    // file silent-fails instead of crashing.
+    this.load.audio('music-menu',         'assets/audio/music-menu.mp3');
+    this.load.audio('music-betting',      'assets/audio/music-betting.mp3');
+    this.load.audio('sfx-chip-plop',      'assets/audio/sfx-chip-plop.mp3');
+    this.load.audio('sfx-bet-confirm',    'assets/audio/sfx-bet-confirm.mp3');
+    this.load.audio('sfx-suspect-drop',   'assets/audio/sfx-suspect-drop.mp3');
+    this.load.audio('sfx-gotcha',         'assets/audio/sfx-gotcha.mp3');
+    this.load.audio('sfx-clue-buy',       'assets/audio/sfx-clue-buy.mp3');
+    this.load.audio('sfx-burn-warning',   'assets/audio/sfx-burn-warning.mp3');
+    this.load.audio('sfx-hover',          'assets/audio/sfx-hover.mp3');
+    this.load.audio('sfx-suspect-select', 'assets/audio/sfx-suspect-select.mp3');
+    this.load.audio('sfx-win',            'assets/audio/sfx-win.mp3');
+    this.load.audio('sfx-loss',           'assets/audio/sfx-loss.mp3');
 
     // ── Room backgrounds (12 neon-line-art rooms) ──────────────
     // Texture key is `bg-<roomId>` where roomId matches MURDER_DATA.rooms[].id.

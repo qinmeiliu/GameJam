@@ -481,6 +481,9 @@ class GameScene extends Phaser.Scene {
   }
   _pulseBurnVignette(stage) {
     if (!this._burnVignetteG) return;
+    // Tense beep paired with the visual pulse — stages 2 and 3 get the same
+    // sound but the visual escalates (color + double-beat) for urgency.
+    this._playSfx('sfx-burn-warning', 0.35 + stage * 0.05);
     const color =
       stage === 1 ? VI.COLORS.VI_AMBER  :
       stage === 2 ? VI.COLORS.VI_ORANGE :
@@ -890,6 +893,8 @@ class GameScene extends Phaser.Scene {
           highlightG.lineStyle(2, VI.COLORS.GOLD, 0.5);
           highlightG.strokeCircle(cx, cy, tokenR + 8);
         }
+        // Subtle hover blip — very quiet so rapid hovering doesn't annoy.
+        this._playSfx('sfx-hover', 0.25);
         showBubble();
       });
       zone.on('pointerout', () => {
@@ -900,6 +905,7 @@ class GameScene extends Phaser.Scene {
         if (this.gs.phase !== VI.PHASES.ACCUSE && this.gs.phase !== VI.PHASES.SECOND_CHANCE) return;
         this.gs.selectedIdx = idx;
         this._refreshSuspectHighlights();
+        this._playSfx('sfx-suspect-select', 0.50);
         this.events.emit('game:suspect_selected', { idx, suspect: sus });
       });
 
@@ -964,8 +970,11 @@ class GameScene extends Phaser.Scene {
         delay,
         ease: 'Bounce.Out',
         onComplete: () => {
-          // Land flash — bright brand-color ring expanding from the hex
+          // Land flash — bright brand-color ring expanding from the hex.
+          // Audio: each landing thumps; overlapping plays are fine (Phaser
+          // sound manager mixes simultaneous instances of the same key).
           this._spawnHexImpact(s.cx, s.cy, s.tokenR, s.sus.color);
+          this._playSfx('sfx-suspect-drop', 0.40);
           // Re-arm interactivity
           s.zone.setInteractive({ cursor: 'pointer' });
           s.revealed = true;
@@ -1740,6 +1749,7 @@ class GameScene extends Phaser.Scene {
     this._updateNoClueBonusIndicator();
 
     this._addClue(`🛒 Bought CLUE #${idx + 1} for $${cost}.`, VI.HEX.GOLD);
+    this._playSfx('sfx-clue-buy', 0.55);
   }
 
   _refreshClueCard(idx) {
@@ -1993,6 +2003,8 @@ class GameScene extends Phaser.Scene {
       onComplete && onComplete();
       return;
     }
+    // Dramatic stinger plays at the START so it lands with Ducky's slide-in
+    this._playSfx('sfx-gotcha', 0.75);
     const W = this.scale.width;
     const H = this.scale.height;
 
@@ -2160,6 +2172,10 @@ class GameScene extends Phaser.Scene {
     const { width, height } = this.scale;
     const cx = width / 2, cy = height / 2;
     const pw = 560, ph = 360;
+
+    // Outcome stinger — fires alongside the panel scale-in so the win/loss
+    // cue lands with the visual. Volume balanced so it doesn't bury music.
+    this._playSfx(win ? 'sfx-win' : 'sfx-loss', 0.70);
 
     // Backdrop dim — instant; the panel is what gets the dramatic entrance
     const overlay = this.add.graphics();
@@ -2602,6 +2618,14 @@ class GameScene extends Phaser.Scene {
         ease: 'Cubic.easeOut',
       });
     });
+  }
+
+  // SFX helper — fire-and-forget short sound. Respects the global mute
+  // (sound.mute). Multiple plays of the same key are allowed simultaneously
+  // (e.g. rapid chip clicks overlap cleanly). Silent-fails if asset missing.
+  _playSfx(key, volume) {
+    if (!this.cache.audio.exists(key)) return;
+    this.sound.play(key, { volume: volume != null ? volume : 0.6 });
   }
 
   // Music helper — plays the named track on loop, stops any OTHER music

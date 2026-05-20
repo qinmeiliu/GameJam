@@ -160,6 +160,10 @@ class LobbyScene extends Phaser.Scene {
     if (this._launching) return;
     this._launching = true;
 
+    // Audio: same satisfying ka-chunk as confirming a bet — fits the
+    // "we're starting now" moment of committing to a round.
+    this._playSfx('sfx-bet-confirm', 0.65);
+
     // Localized gold-ring burst on the table — no full-screen camera flash
     // (the screen-wide gold flash on every transition was distracting).
     const tx = this._tableCenterX();

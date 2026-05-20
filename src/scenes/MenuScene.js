@@ -37,8 +37,9 @@ class MenuScene extends Phaser.Scene {
       this.sound.once('unlocked', () => this._playMusic('music-menu', 0.45));
     }
 
-    // ── Ducky himself, our detective host ─────────────────────
-    this._drawTitleDucky();
+    // Title Ducky removed — the logo PNG already includes him, and the
+    // separate circle-framed portrait was redundant against the title.
+    // this._drawTitleDucky();
 
     // ── Game Title — QUACKDUNNIT hero logo ────────────────────
     const titleY = cy - 80;
@@ -58,9 +59,10 @@ class MenuScene extends Phaser.Scene {
     let bobTargets;
     if (this.textures.exists('logo-quackdunnit')) {
       const logo = this.add.image(cx, titleY, 'logo-quackdunnit');
-      // Source is 1536×1024 (3:2). Display at ~780×520 so it dominates
-      // the upper half of the screen without overflowing the play button.
-      logo.setDisplaySize(780, 520);
+      // Source is 1536×1024 (3:2). Display at ~960×640 so the title is
+      // the dominant element of the menu now that the separate Ducky
+      // portrait has been removed.
+      logo.setDisplaySize(960, 640);
       bobTargets = [logo];
     } else {
       // Legacy text fallback — keeps menu rendering if logo PNG is missing.

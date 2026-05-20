@@ -519,7 +519,10 @@ class UIScene extends Phaser.Scene {
       if (gs && gs.gs.phase !== VI.PHASES.BETTING) return;
       this._deadEyeActive = !this._deadEyeActive;
       this._redrawDeadEye(true);
-      this._refreshPotentialWin(this._accumulatedBet);   // preview reflects side-bet upside
+      // CURRENT BET displays total stake (main + DEAD-EYE wager) — refresh
+      // so toggling on/off immediately updates both the bet text AND the
+      // potential-win preview.
+      this._refreshBetDisplay(this._accumulatedBet);
     });
 
     // Track every bet-builder element so we can show/hide as a group.
@@ -555,7 +558,15 @@ class UIScene extends Phaser.Scene {
 
   _refreshBetDisplay(amt) {
     this._accumulatedBet = amt;
-    if (this._betText) this._betText.setText(`$${amt.toLocaleString()}`);
+    if (this._betText) {
+      // When DEAD-EYE is toggled on, show the TOTAL cash at stake
+      // (main bet + 10% side wager) so the player sees the full deduction.
+      const deWager = this._deadEyeActive
+        ? Math.round(amt * (VI.GAME.DEAD_EYE_WAGER_FRAC || 0.10))
+        : 0;
+      const total = amt + deWager;
+      this._betText.setText(`$${total.toLocaleString()}`);
+    }
     this._refreshPotentialWin(amt);
   }
 

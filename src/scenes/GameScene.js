@@ -93,6 +93,16 @@ class GameScene extends Phaser.Scene {
       this.scene.stop('GameScene');
     });
 
+    // ENTER → advance from scoreboard. Failsafe in case the NEXT CASE button
+    // ever fails to register a click (defensive against the "stuck on win"
+    // intermittent bug). Only fires when actually in SCOREBOARD.
+    this.input.keyboard.on('keydown-ENTER', () => {
+      if (this.gs.phase === VI.PHASES.SCOREBOARD) {
+        this.events.emit('game:next_round', this.gs.balance);
+        this._startRound();
+      }
+    });
+
     // Destruction cleanup
     this.events.once('shutdown', () => this._stopTimer());
   }
@@ -2007,6 +2017,13 @@ class GameScene extends Phaser.Scene {
       onComplete && onComplete();
       return;
     }
+    // Defensive: nuke any LEFTOVER pointing-overlay objects before creating
+    // new ones. Prevents the "stuck on win" blocker class — if a previous
+    // accuse's cleanup didn't complete (race, error, etc.), those objects
+    // would block scoreboard input at higher depth (1500+). This belt+
+    // suspenders is the failsafe.
+    this._clearDuckyPointing();
+
     // Dramatic stinger plays at the START so it lands with Ducky's slide-in
     this._playSfx('sfx-gotcha', 0.75);
     const W = this.scale.width;
@@ -2078,22 +2095,44 @@ class GameScene extends Phaser.Scene {
       duration: 280, delay: 220, ease: 'Back.Out',
     });
 
-    // Hold for ~700ms after entrance, then fade everything out and fire callback
-    this.time.delayedCall(900, () => {
+    // Track all created objects so a force-cleanup helper can nuke them
+    // if the normal fade-out path doesn't fire (race condition between
+    // tween completion and phase transition, etc.).
+    this._duckyPointingObjs = [dim, ducky, mask, frame, accuseText];
+
+    // Hold for ~700ms after entrance, then fade everything out and fire callback.
+    // Wrapped in try/catch so a partial-destroy state from _clearDuckyPointing
+    // can't leak an error that blocks the onComplete callback chain.
+    const cleanupDelay = this.time.delayedCall(900, () => {
       this.tweens.add({
         targets: [dim, ducky, frame, accuseText],
         alpha: 0,
         duration: 220, ease: 'Cubic.easeIn',
         onComplete: () => {
-          dim.destroy();
-          ducky.destroy();
-          mask.destroy();
-          frame.destroy();
-          accuseText.destroy();
+          this._clearDuckyPointing();
           if (onComplete) onComplete();
         },
       });
     });
+    // Stash so the force-clear helper can also cancel the pending delayedCall.
+    this._duckyPointingDelay = cleanupDelay;
+  }
+
+  // Force-clear the J'ACCUSE overlay. Called both from the normal fade-out
+  // path AND from defensive cleanup in _showDuckyPointing / scoreboard so
+  // leftover objects can't block input at high depth.
+  _clearDuckyPointing() {
+    if (this._duckyPointingDelay) {
+      try { this._duckyPointingDelay.remove(); } catch (e) { /* swallow */ }
+      this._duckyPointingDelay = null;
+    }
+    if (!this._duckyPointingObjs) return;
+    this._duckyPointingObjs.forEach(o => {
+      if (o && !o.destroyed) {
+        try { o.destroy(); } catch (e) { /* swallow */ }
+      }
+    });
+    this._duckyPointingObjs = null;
   }
 
   _resolveWin(secondAccusation) {
@@ -2176,6 +2215,12 @@ class GameScene extends Phaser.Scene {
     const { width, height } = this.scale;
     const cx = width / 2, cy = height / 2;
     const pw = 560, ph = 360;
+
+    // FAILSAFE: force-clear the J'ACCUSE overlay before showing the
+    // scoreboard. If the pointing animation's onComplete didn't fire for
+    // any reason, those objects (depth 1500+) would sit above the scoreboard
+    // and block input — the "stuck on win" blocker. Belt + suspenders.
+    this._clearDuckyPointing();
 
     // Outcome stinger — fires alongside the panel scale-in so the win/loss
     // cue lands with the visual. Volume balanced so it doesn't bury music.

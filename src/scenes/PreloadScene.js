@@ -73,7 +73,10 @@ class PreloadScene extends Phaser.Scene {
     // All scenes check this.cache.audio.exists before playing so a missing
     // file silent-fails instead of crashing.
     this.load.audio('music-menu',         'assets/audio/music-menu.mp3');
-    this.load.audio('music-betting',      'assets/audio/music-betting.mp3');
+    // music-betting was tried but didn't fit the casino-noir vibe. We keep
+    // music-menu running throughout the game at a lower volume instead.
+    // (file still on disk in case we want to revisit; load commented out.)
+    // this.load.audio('music-betting',   'assets/audio/music-betting.mp3');
     this.load.audio('sfx-chip-plop',      'assets/audio/sfx-chip-plop.mp3');
     this.load.audio('sfx-bet-confirm',    'assets/audio/sfx-bet-confirm.mp3');
     this.load.audio('sfx-suspect-drop',   'assets/audio/sfx-suspect-drop.mp3');

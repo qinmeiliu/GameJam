@@ -28,10 +28,14 @@ class MenuScene extends Phaser.Scene {
     this._drawCinematicBackdrop();
 
     // ── Music: ambient noir-jazz menu loop ────────────────────
-    // playMusic() is a registry-aware helper that swaps tracks gracefully
-    // and respects the global mute state. Implementation lives at the
-    // bottom of this scene as a small helper.
+    // Browsers block audio playback until the first user interaction.
+    // Phaser's sound manager flags this via `this.sound.locked === true`
+    // and emits 'unlocked' once any input lands. We try-and-retry: the
+    // first call queues; the second runs after unlock and actually plays.
     this._playMusic('music-menu', 0.45);
+    if (this.sound.locked) {
+      this.sound.once('unlocked', () => this._playMusic('music-menu', 0.45));
+    }
 
     // ── Ducky himself, our detective host ─────────────────────
     this._drawTitleDucky();

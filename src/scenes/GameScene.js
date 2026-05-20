@@ -234,8 +234,10 @@ class GameScene extends Phaser.Scene {
   // pace. We show a soft 60s countdown for pacing/feedback only; it
   // doesn't force a transition.
   _enter_BETTING() {
-    // Swap from menu-music to betting-music when the round actually starts.
-    this._playMusic('music-betting', 0.40);
+    // Keep the menu/noir-jazz loop running but DROP volume so it sits
+    // under the gameplay SFX. (Was a betting-music swap; the betting
+    // track didn't fit the casino-noir mood, so we reuse the menu loop.)
+    this._playMusic('music-menu', 0.25);
 
     this._showCaseFile();
     this._showTimerText();
@@ -893,8 +895,10 @@ class GameScene extends Phaser.Scene {
           highlightG.lineStyle(2, VI.COLORS.GOLD, 0.5);
           highlightG.strokeCircle(cx, cy, tokenR + 8);
         }
-        // Subtle hover blip — very quiet so rapid hovering doesn't annoy.
-        this._playSfx('sfx-hover', 0.25);
+        // Hover SFX intentionally disabled — the current ElevenLabs file is
+        // too harsh for repeated UI hovers. Re-enable once a gentler file
+        // lands at assets/audio/sfx-hover.mp3.
+        // this._playSfx('sfx-hover', 0.25);
         showBubble();
       });
       zone.on('pointerout', () => {

@@ -271,6 +271,8 @@ class LobbyScene extends Phaser.Scene {
       const optIdx = idx - this._mandatory;
       this._optionalOn[optIdx] = !this._optionalOn[optIdx];
       this._refreshAll();
+      // Audio: same satisfying confirmation click as in-game suspect select.
+      this._playSfx('sfx-suspect-select', 0.50);
       // Localized seat pulse instead of a full-screen camera flash.
       // Tweening whichever silhouette layer is visible (PNG image preferred,
       // vector fallback otherwise) keeps the feedback right at the click.
@@ -287,6 +289,13 @@ class LobbyScene extends Phaser.Scene {
 
   _isOptional(idx) {
     return idx >= this._mandatory;
+  }
+
+  // SFX helper — fire-and-forget short sound, respects global mute.
+  // Mirrors the helper in MenuScene/GameScene/UIScene.
+  _playSfx(key, volume) {
+    if (!this.cache.audio.exists(key)) return;
+    this.sound.play(key, { volume: volume != null ? volume : 0.6 });
   }
 
   _seatIsOccupied(idx) {

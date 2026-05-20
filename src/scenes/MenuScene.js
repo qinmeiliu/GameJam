@@ -27,13 +27,20 @@ class MenuScene extends Phaser.Scene {
     // vector treatment if the PNG hasn't loaded.
     this._drawCinematicBackdrop();
 
+    // ── Music: ambient noir-jazz menu loop ────────────────────
+    // playMusic() is a registry-aware helper that swaps tracks gracefully
+    // and respects the global mute state. Implementation lives at the
+    // bottom of this scene as a small helper.
+    this._playMusic('music-menu', 0.45);
+
     // ── Ducky himself, our detective host ─────────────────────
     this._drawTitleDucky();
 
-    // ── Game Title — QUACKDUNNIT, single hero word ────────────
+    // ── Game Title — QUACKDUNNIT hero logo ────────────────────
     const titleY = cy - 80;
 
-    // Layered hazes — cyan back-glow, magenta sub-shadow, purple bloom.
+    // Subtle hazes BEHIND the logo for atmospheric glow — purple bloom,
+    // soft cyan and magenta accents in the Glow-Fi brand vocabulary.
     const haze = this.add.graphics();
     haze.fillStyle(VI.COLORS.VI_PURPLE, 0.20);
     haze.fillEllipse(cx, titleY + 4, 980, 230);
@@ -42,28 +49,33 @@ class MenuScene extends Phaser.Scene {
     haze.fillStyle(VI.COLORS.MAGENTA, 0.06);
     haze.fillEllipse(cx, titleY + 22, 680, 130);
 
-    // Back-shadow layer — cyan offset behind the gold for chromatic depth
-    const titleBack = this.add.text(cx + 4, titleY + 4, 'QUACKDUNNIT', {
-      fontFamily: VI.FONTS.HEADING,
-      fontSize: '118px',
-      color: VI.HEX.CYAN,
-      letterSpacing: 12,
-    }).setOrigin(0.5).setAlpha(0.55);
+    // Hero logo. Falls back to layered text if the PNG didn't load (e.g.
+    // first run before preload — defensive only).
+    let bobTargets;
+    if (this.textures.exists('logo-quackdunnit')) {
+      const logo = this.add.image(cx, titleY, 'logo-quackdunnit');
+      // Source is 1536×1024 (3:2). Display at ~780×520 so it dominates
+      // the upper half of the screen without overflowing the play button.
+      logo.setDisplaySize(780, 520);
+      bobTargets = [logo];
+    } else {
+      // Legacy text fallback — keeps menu rendering if logo PNG is missing.
+      const titleBack = this.add.text(cx + 4, titleY + 4, 'QUACKDUNNIT', {
+        fontFamily: VI.FONTS.HEADING, fontSize: '118px',
+        color: VI.HEX.CYAN, letterSpacing: 12,
+      }).setOrigin(0.5).setAlpha(0.55);
+      const title = this.add.text(cx, titleY, 'QUACKDUNNIT', {
+        fontFamily: VI.FONTS.HEADING, fontSize: '118px',
+        color: VI.HEX.GOLD, stroke: '#000000', strokeThickness: 8,
+        shadow: { blur: 36, color: VI.HEX.GOLD, fill: true },
+        letterSpacing: 12,
+      }).setOrigin(0.5);
+      bobTargets = [title, titleBack];
+    }
 
-    // Front title — gold with heavy glow
-    const title = this.add.text(cx, titleY, 'QUACKDUNNIT', {
-      fontFamily: VI.FONTS.HEADING,
-      fontSize: '118px',
-      color: VI.HEX.GOLD,
-      stroke: '#000000',
-      strokeThickness: 8,
-      shadow: { blur: 36, color: VI.HEX.GOLD, fill: true },
-      letterSpacing: 12,
-    }).setOrigin(0.5);
-
-    // Gentle bob — alive, but subtle
+    // Gentle bob — alive, but subtle. Single tween covers either path.
     this.tweens.add({
-      targets: [title, titleBack], y: '-=4',
+      targets: bobTargets, y: '-=4',
       duration: 1800, yoyo: true, repeat: -1, ease: 'Sine.easeInOut',
     });
 
@@ -102,6 +114,34 @@ class MenuScene extends Phaser.Scene {
     const k = this.input.keyboard;
     k.on('keydown-SPACE', () => this._startGame());
     k.on('keydown-ENTER', () => this._startGame());
+
+    // ── Mute toggle (top-right corner) ────────────────────────
+    // Reads/writes a registry-level boolean so the state persists across
+    // scene transitions. Same helper is also built in GameScene.
+    this._buildMuteToggle();
+  }
+
+  // Small speaker icon in the top-right corner. Click toggles
+  // this.sound.mute (Phaser's global audio mute) and persists the state
+  // via the game registry so other scenes pick it up on create.
+  _buildMuteToggle() {
+    const { width } = this.scale;
+    const x = width - 32, y = 32;
+    const initialMuted = !!this.registry.get('audioMuted');
+    this.sound.mute = initialMuted;
+
+    const lbl = this.add.text(x, y, initialMuted ? '🔇' : '🔊', {
+      fontFamily: VI.FONTS.HEADING, fontSize: '22px', color: VI.HEX.CYAN,
+    }).setOrigin(0.5).setAlpha(0.65);
+    const zone = this.add.zone(x, y, 36, 36).setInteractive({ cursor: 'pointer' });
+    zone.on('pointerover', () => lbl.setAlpha(1));
+    zone.on('pointerout',  () => lbl.setAlpha(0.65));
+    zone.on('pointerup', () => {
+      const muted = !this.sound.mute;
+      this.sound.mute = muted;
+      this.registry.set('audioMuted', muted);
+      lbl.setText(muted ? '🔇' : '🔊');
+    });
   }
 
   _startGame() {
@@ -111,6 +151,25 @@ class MenuScene extends Phaser.Scene {
   }
 
   // ── Private helpers ─────────────────────────────────────────
+
+  // Music helper — plays the named track on loop, stops any OTHER music
+  // currently looping. Phaser's `this.sound` manager is shared across
+  // scenes, so calling this from MenuScene/GameScene/etc. cooperates
+  // automatically — switching scenes doesn't need explicit handoffs.
+  _playMusic(key, volume) {
+    if (!this.cache.audio.exists(key)) return;
+    // Stop any other looping music so a track-switch doesn't double up.
+    this.sound.sounds.forEach(s => {
+      if (s.isPlaying && s.loop && s.key !== key) s.stop();
+    });
+    let music = this.sound.get(key);
+    if (!music) {
+      music = this.sound.add(key, { loop: true, volume: volume || 0.45 });
+    } else {
+      music.setVolume(volume || 0.45);
+    }
+    if (!music.isPlaying) music.play();
+  }
 
   // Ballroom PNG dimmed under a dark vignette. If the PNG isn't loaded
   // (asset missing or first run before preload completes), falls back to

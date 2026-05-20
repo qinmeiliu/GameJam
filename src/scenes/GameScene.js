@@ -234,6 +234,9 @@ class GameScene extends Phaser.Scene {
   // pace. We show a soft 60s countdown for pacing/feedback only; it
   // doesn't force a transition.
   _enter_BETTING() {
+    // Swap from menu-music to betting-music when the round actually starts.
+    this._playMusic('music-betting', 0.40);
+
     this._showCaseFile();
     this._showTimerText();
     this._setBackButtonVisible(true);   // re-pick suspects available only here
@@ -2599,6 +2602,23 @@ class GameScene extends Phaser.Scene {
         ease: 'Cubic.easeOut',
       });
     });
+  }
+
+  // Music helper — plays the named track on loop, stops any OTHER music
+  // currently looping. Mirrors the helper in MenuScene; the Phaser sound
+  // manager is shared across scenes so scene transitions cooperate.
+  _playMusic(key, volume) {
+    if (!this.cache.audio.exists(key)) return;
+    this.sound.sounds.forEach(s => {
+      if (s.isPlaying && s.loop && s.key !== key) s.stop();
+    });
+    let music = this.sound.get(key);
+    if (!music) {
+      music = this.sound.add(key, { loop: true, volume: volume || 0.45 });
+    } else {
+      music.setVolume(volume || 0.45);
+    }
+    if (!music.isPlaying) music.play();
   }
 
   _drawMiniDucky(x, y) {
